@@ -149,16 +149,6 @@ def construct_url(command: str, params: Dict[str, Any]) -> str:
         logger.error(f"Error getting auth token: {str(e)}")
         # Continue without token - the operation may fail
     
-    # Disable JSON API for now as it's causing formatting issues
-    # JSON API is currently experimental and unreliable
-    # We'll use the standard URL scheme instead which is more reliable
-    use_json_api = False
-    
-    if False and command in ['add'] and use_json_api:
-        # This code is disabled but kept for reference
-        logger.info("JSON API is currently disabled due to formatting issues")
-        pass
-    
     # Standard URL scheme encoding
     if params:
         encoded_params = []
@@ -202,25 +192,6 @@ def construct_url(command: str, params: Dict[str, Any]) -> str:
     
     return url
 
-
-def should_use_json_api() -> bool:
-    """Determine if the JSON API should be used based on Things version."""
-    from .utils import detect_things_version
-    
-    version = detect_things_version()
-    if not version:
-        # Default to using JSON API if version can't be determined
-        return True
-    
-    try:
-        # Parse version string (e.g., '3.15.4')
-        major, minor, _ = map(int, version.split('.'))
-        
-        # JSON API is available in Things 3.4+
-        return major > 3 or (major == 3 and minor >= 4)
-    except Exception:
-        # Default to standard URL scheme if version parsing fails
-        return False
 
 def add_todo(title: str, notes: Optional[str] = None, when: Optional[str] = None,
              deadline: Optional[str] = None, tags: Optional[list[str]] = None,
