@@ -16,9 +16,10 @@ import mcp.types as types
 from .formatters import format_todo, format_project, format_area, format_tag
 from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter
 from .url_scheme import (
-    add_todo, add_project, update_todo, update_project, show, 
-    search, launch_things, execute_url
+    add_project, update_project, show,
+    search, launch_things
 )
+from .applescript_bridge import add_todo_direct, update_todo_direct
 
 # Import and configure enhanced logging
 from .logging_config import setup_logging, get_logger, log_operation_start, log_operation_end
@@ -31,9 +32,8 @@ logger = get_logger(__name__)
 
 # Create the FastMCP server
 mcp = FastMCP(
-    "Things", 
-    description="Interact with the Things task management app",
-    version="0.1.1"
+    "Things",
+    instructions="Interact with the Things task management app",
 )
 
 # LIST VIEWS
@@ -331,31 +331,17 @@ def add_task(
         heading: Heading to add under
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the add_todo URL command
-        result = add_todo(
+        task_id = add_todo_direct(
             title=title,
             notes=notes,
             when=when,
-            deadline=deadline,
             tags=tags,
-            checklist_items=checklist_items,
-            list_id=list_id,
-            list_title=list_title,
-            heading=heading
+            list_title=list_title
         )
-        
-        if not result:
-            return "Error: Failed to create todo"
-        
-        # Invalidate relevant caches after creating a todo
+        if not task_id:
+            return f"Error: Failed to create todo: {title}"
         invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-todos"])
-            
-        return f"Successfully created todo: {title}"
+        return f"Successfully created todo: {title} (ID: {task_id})"
     except Exception as e:
         logger.error(f"Error creating todo: {str(e)}")
         return f"Error creating todo: {str(e)}"
@@ -435,13 +421,7 @@ def update_task(
         canceled: Mark as canceled
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the update_todo URL command
-        result = update_todo(
+        success = update_todo_direct(
             id=id,
             title=title,
             notes=notes,
@@ -451,10 +431,9 @@ def update_task(
             completed=completed,
             canceled=canceled
         )
-        
-        if not result:
-            return "Error: Failed to update todo"
-            
+        if not success:
+            return f"Error: Failed to update todo with ID: {id}"
+        invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-anytime", "get-todos"])
         return f"Successfully updated todo with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating todo: {str(e)}")

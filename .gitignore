@@ -169,9 +169,9 @@ cython_debug/
 .AppleDouble
 .LSOverride
 
-# Test files and temporary development files
-test_*.py
-test_*.sh
+# Ad-hoc test scripts in root (not tests/ directory)
+/test_*.py
+/test_*.sh
 minimal_test.py
 quick_test.py
 run_simple_server.py
