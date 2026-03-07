@@ -175,8 +175,12 @@ class CircuitBreaker:
 class DeadLetterQueue:
     """Store persistently failed operations for manual review"""
     
-    def __init__(self, dlq_file="things_dlq.json"):
-        self.dlq_file = dlq_file
+    def __init__(self, dlq_file=None):
+        if dlq_file is None:
+            from pathlib import Path
+            dlq_file = Path.home() / ".things-mcp" / "things_dlq.json"
+            dlq_file.parent.mkdir(parents=True, exist_ok=True)
+        self.dlq_file = str(dlq_file)
         self.queue = self._load_queue()
         
     def _load_queue(self):
@@ -330,27 +334,6 @@ def detect_things_version():
         logger.error(f"Error detecting Things version: {str(e)}")
     
     return None
-
-
-def validate_tool_registration(tool_list):
-    """Validate that all tools are properly registered"""
-    required_tools = [
-        "get-inbox", "get-today", "get-upcoming", "get-anytime",
-        "get-someday", "get-logbook", "get-trash", "get-todos",
-        "get-projects", "get-areas", "get-tags", "get-tagged-items",
-        "search-todos", "search-advanced", "get-recent", "add-todo",
-        "add-project", "update-todo", "update-project", "show-item"
-    ]
-    
-    tool_names = [t.name for t in tool_list]
-    missing_tools = [tool for tool in required_tools if tool not in tool_names]
-    
-    if missing_tools:
-        logger.error(f"Missing tool registrations: {missing_tools}")
-        return False
-    
-    logger.info(f"All {len(tool_list)} tools are properly registered")
-    return True
 
 
 # Create global instances

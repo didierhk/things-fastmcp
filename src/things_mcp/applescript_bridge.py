@@ -5,24 +5,32 @@ from typing import Optional, List, Dict, Any, Union
 
 logger = logging.getLogger(__name__)
 
-def run_applescript(script: str) -> Union[str, bool]:
+def run_applescript(script: str, timeout: int = 10) -> Union[str, bool]:
     """Run an AppleScript command and return the result.
-    
+
     Args:
         script: The AppleScript code to execute
-        
+        timeout: Seconds before giving up (default 10)
+
     Returns:
-        The result of the AppleScript execution, or False if it failed
+        The result string, or False if it failed or timed out
     """
     try:
-        result = subprocess.run(['osascript', '-e', script], 
-                              capture_output=True, text=True)
-        
+        result = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+
         if result.returncode != 0:
             logger.error(f"AppleScript error: {result.stderr}")
             return False
-        
+
         return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        logger.error(f"AppleScript timed out after {timeout}s")
+        return False
     except Exception as e:
         logger.error(f"Error running AppleScript: {str(e)}")
         return False
@@ -124,9 +132,6 @@ def escape_applescript_string(text: str) -> str:
     """
     if not text:
         return ""
-    
-    # Replace any "+" with spaces first
-    text = text.replace("+", " ")
     
     # Escape quotes by doubling them (AppleScript style)
     return text.replace('"', '""')

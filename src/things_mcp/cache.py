@@ -33,11 +33,9 @@ class ThingsCache:
         
     def _make_key(self, operation: str, **kwargs) -> str:
         """Generate a cache key from operation and parameters."""
-        # Sort kwargs to ensure consistent keys
         sorted_params = json.dumps(kwargs, sort_keys=True)
-        key_string = f"{operation}:{sorted_params}"
-        # Use hash for shorter keys
-        return hashlib.md5(key_string.encode()).hexdigest()
+        params_hash = hashlib.md5(sorted_params.encode()).hexdigest()
+        return f"{operation}:{params_hash}"
     
     def get(self, operation: str, **kwargs) -> Optional[Any]:
         """
@@ -102,11 +100,11 @@ class ThingsCache:
                     logger.debug(f"Invalidated specific cache entry: {key}")
             elif operation:
                 # Invalidate all entries for an operation
-                keys_to_remove = [k for k in self.cache.keys() 
-                                 if k.startswith(hashlib.md5(f"{operation}:".encode()).hexdigest()[:8])]
+                prefix = f"{operation}:"
+                keys_to_remove = [k for k in self.cache if k.startswith(prefix)]
                 for key in keys_to_remove:
                     del self.cache[key]
-                logger.debug(f"Invalidated {len(keys_to_remove)} cache entries for operation: {operation}")
+                logger.debug(f"Invalidated {len(keys_to_remove)} entries for: {operation}")
             else:
                 # Clear entire cache
                 self.cache.clear()
