@@ -15,11 +15,11 @@ import mcp.types as types
 # Import supporting modules
 from .formatters import format_todo, format_project, format_area, format_tag
 from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter
-from .url_scheme import (
-    add_project, update_project, show,
-    search, launch_things
+from .url_scheme import show, search, launch_things
+from .applescript_bridge import (
+    add_todo_direct, update_todo_direct,
+    add_project_direct, update_project_direct
 )
-from .applescript_bridge import add_todo_direct, update_todo_direct
 
 # Import and configure enhanced logging
 from .logging_config import setup_logging, get_logger, log_operation_start, log_operation_end
@@ -371,27 +371,19 @@ def add_new_project(
         todos: Initial todos to create in the project
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the add_project URL command
-        result = add_project(
+        project_id = add_project_direct(
             title=title,
             notes=notes,
             when=when,
             deadline=deadline,
             tags=tags,
-            area_id=area_id,
             area_title=area_title,
             todos=todos
         )
-        
-        if not result:
-            return "Error: Failed to create project"
-            
-        return f"Successfully created project: {title}"
+        if not project_id:
+            return f"Error: Failed to create project: {title}"
+        invalidate_caches_for(["get-projects", "get-today", "get-upcoming", "get-anytime"])
+        return f"Successfully created project: {title} (ID: {project_id})"
     except Exception as e:
         logger.error(f"Error creating project: {str(e)}")
         return f"Error creating project: {str(e)}"
@@ -464,13 +456,7 @@ def update_existing_project(
         canceled: Mark as canceled
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the update_project URL command
-        result = update_project(
+        success = update_project_direct(
             id=id,
             title=title,
             notes=notes,
@@ -480,10 +466,9 @@ def update_existing_project(
             completed=completed,
             canceled=canceled
         )
-        
-        if not result:
-            return "Error: Failed to update project"
-            
+        if not success:
+            return f"Error: Failed to update project with ID: {id}"
+        invalidate_caches_for(["get-projects", "get-today", "get-upcoming", "get-anytime"])
         return f"Successfully updated project with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating project: {str(e)}")

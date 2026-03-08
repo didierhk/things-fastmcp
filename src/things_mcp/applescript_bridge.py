@@ -121,6 +121,175 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         logger.error("Failed to create todo")
         return False
 
+def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[str] = None,
+                       deadline: Optional[str] = None, tags: Optional[List[str]] = None,
+                       area_title: Optional[str] = None, todos: Optional[List[str]] = None) -> Union[str, bool]:
+    """Create a project in Things directly using AppleScript.
+
+    Args:
+        title: Title of the project
+        notes: Notes for the project
+        when: When to schedule (today, tomorrow, evening, anytime, someday)
+        deadline: Deadline in YYYY-MM-DD format
+        tags: Tags to apply
+        area_title: Name of area to add to
+        todos: Initial todo titles to create in the project
+
+    Returns:
+        ID of the created project if successful, False otherwise
+    """
+    import re
+
+    script_parts = ['tell application "Things3"']
+
+    properties = [f'name:"{escape_applescript_string(title)}"']
+    if notes:
+        properties.append(f'notes:"{escape_applescript_string(notes)}"')
+
+    script_parts.append(f'set newProject to make new project with properties {{{", ".join(properties)}}}')
+
+    if when:
+        when_mapping = {
+            'today': '',
+            'tomorrow': 'set activation date of newProject to ((current date) + 1 * days)',
+            'evening': '',
+            'anytime': '',
+            'someday': 'set status of newProject to someday'
+        }
+        if when in when_mapping:
+            if when_mapping[when]:
+                script_parts.append(when_mapping[when])
+        else:
+            logger.warning(f"Custom date format '{when}' not supported for project, defaulting to today")
+
+    if deadline and re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
+        script_parts.append(f'set deadline of newProject to date "{deadline}"')
+
+    if tags:
+        for tag in tags:
+            script_parts.append(f'tell newProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
+
+    if area_title:
+        script_parts.append(f'set area_name to "{escape_applescript_string(area_title)}"')
+        script_parts.append('try')
+        script_parts.append('  set target_area to first area whose name is area_name')
+        script_parts.append('  set area of newProject to target_area')
+        script_parts.append('on error')
+        script_parts.append('  -- Area not found, project will remain unassigned')
+        script_parts.append('end try')
+
+    if todos:
+        for todo_title in todos:
+            script_parts.append(f'tell newProject to make new to do with properties {{name:"{escape_applescript_string(todo_title)}"}}')
+
+    script_parts.append('return id of newProject')
+    script_parts.append('end tell')
+
+    script = '\n'.join(script_parts)
+    logger.debug(f"Executing AppleScript: {script}")
+
+    result = run_applescript(script)
+    if result:
+        logger.info(f"Successfully created project with ID: {result}")
+        return result
+    else:
+        logger.error("Failed to create project")
+        return False
+
+
+def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[str] = None,
+                          when: Optional[str] = None, deadline: Optional[str] = None,
+                          tags: Optional[List[str]] = None,
+                          completed: Optional[bool] = None, canceled: Optional[bool] = None) -> bool:
+    """Update a project directly using AppleScript.
+
+    Args:
+        id: The ID of the project to update
+        title: New title
+        notes: New notes
+        when: New schedule (today, tomorrow, evening, anytime, someday, or YYYY-MM-DD)
+        deadline: New deadline (YYYY-MM-DD)
+        tags: New tags (replaces existing)
+        completed: Mark as completed
+        canceled: Mark as canceled
+
+    Returns:
+        True if successful, False otherwise
+    """
+    import re
+
+    script_parts = ['tell application "Things3"']
+    script_parts.append('try')
+    script_parts.append(f'    set theProject to project id "{escape_applescript_string(id)}"')
+
+    if title:
+        script_parts.append(f'    set name of theProject to "{escape_applescript_string(title)}"')
+
+    if notes:
+        script_parts.append(f'    set notes of theProject to "{escape_applescript_string(notes)}"')
+
+    if when:
+        is_date_format = re.match(r'^\d{4}-\d{2}-\d{2}$', when)
+        if when == 'today':
+            script_parts.append('    move theProject to list "Today"')
+        elif when == 'tomorrow':
+            script_parts.append('    set activation date of theProject to ((current date) + (1 * days))')
+            script_parts.append('    move theProject to list "Upcoming"')
+        elif when == 'evening':
+            script_parts.append('    move theProject to list "Evening"')
+        elif when == 'anytime':
+            script_parts.append('    move theProject to list "Anytime"')
+        elif when == 'someday':
+            script_parts.append('    move theProject to list "Someday"')
+        elif is_date_format:
+            script_parts.append(f'    set activation date of theProject to date "{when}"')
+            script_parts.append('    move theProject to list "Upcoming"')
+        else:
+            logger.warning(f"Schedule format '{when}' not supported for project update")
+
+    if deadline:
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
+            script_parts.append(f'    set deadline of theProject to date "{deadline}"')
+        else:
+            logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
+
+    if tags is not None:
+        if isinstance(tags, str):
+            tags = [tags]
+        for tag in tags:
+            script_parts.append(f'    tell theProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
+
+    if completed is not None:
+        if completed:
+            script_parts.append('    set status of theProject to completed')
+        else:
+            script_parts.append('    set status of theProject to open')
+
+    if canceled is not None:
+        if canceled:
+            script_parts.append('    set status of theProject to canceled')
+        else:
+            script_parts.append('    set status of theProject to open')
+
+    script_parts.append('    return true')
+    script_parts.append('on error errMsg')
+    script_parts.append('    log "Error updating project: " & errMsg')
+    script_parts.append('    return false')
+    script_parts.append('end try')
+    script_parts.append('end tell')
+
+    script = '\n'.join(script_parts)
+    logger.info(f"Executing AppleScript for update_project_direct: \n{script}")
+
+    result = run_applescript(script)
+    if result == "true":
+        logger.info(f"Successfully updated project with ID: {id}")
+        return True
+    else:
+        logger.error(f"AppleScript update_project_direct failed: {result}")
+        return False
+
+
 def escape_applescript_string(text: str) -> str:
     """Escape special characters in an AppleScript string.
     
