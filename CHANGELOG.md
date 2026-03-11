@@ -5,6 +5,33 @@ All notable changes to Things 3 Enhanced MCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-11
+
+### Fixed
+- **All write operations now work reliably** — rerouted `add-todo`, `update-todo`, `add-project`, `update-project` from broken URL scheme to AppleScript bridge (`osascript`). URL scheme writes silently succeeded but never modified Things in background/stdio processes.
+- `escape_applescript_string` no longer corrupts `+` characters (e.g., "C++ Programming" was becoming "C   Programming")
+- `run_applescript` now has a `timeout` parameter (default 10s) — prevents hung Things from blocking the MCP server indefinitely
+- Cache invalidation by operation name now works — keys use `"operation:hash"` prefix format instead of opaque MD5
+- Dead letter queue writes to `~/.things-mcp/things_dlq.json` instead of current working directory
+- Removed duplicate `validate_tool_registration` function in utils.py
+
+### Added
+- `add_project_direct()` — create projects via AppleScript
+- `update_project_direct()` — update projects via AppleScript
+- Test suite: 31 automated tests covering applescript_bridge, cache, and all fast_server write tools
+
+### Removed
+- `handlers.py` (25KB) — dead code, never imported by active server
+- `mcp_tools.py` (16KB) — dead code, old-style tool schemas
+- `simple_server.py` (21KB) — dead code, unused duplicate server
+- `simple_url_scheme.py` (~8KB) — dead code, only used by simple_server
+- `httpx` dependency — not imported anywhere in source
+- Dead JSON API code in `url_scheme.py`
+
+### Changed
+- `fast_server.py` no longer imports `add_todo`, `update_todo`, `add_project`, `update_project` from `url_scheme`
+- `.gitignore` updated to allow test files in `tests/` directory
+
 ## [1.0.0] - 2025-05-30
 
 ### Added
@@ -24,7 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive error tracking
   - Debug-friendly output
 - 🛡️ **Error Handling**: Comprehensive exception management and recovery
-- 🧪 **Test Suite**: Extensive tests for reliability
 - 📦 **Smithery Support**: Full configuration for Smithery registry deployment
 - 📝 **Documentation**: Enhanced README with detailed setup and troubleshooting guides
 
