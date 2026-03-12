@@ -9,7 +9,7 @@ This server leverages the [Things.py](https://github.com/thingsapi/things.py) li
 - **Dead letter queue** for failed operations
 - **Intelligent caching** for improved performance
 - **Comprehensive logging** with structured JSON output
-- **AppleScript bridge** for operations that fail with URL schemes
+- **AppleScript bridge** for reliable write operations (`add`, `update`, `delete`)
 - **Rate limiting** to prevent overwhelming the Things app
 - **Extensive test suite** for reliability 
 
@@ -144,7 +144,7 @@ Restart the Claude Desktop app to apply the changes.
 
 ### Sample Usage with Claude Desktop
 * "What's on my todo list today?"
-* "Create a todo to pack for my beach vacation next week, include a packling checklist."
+* "Create a todo to pack for my beach vacation next week, include a packing checklist."
 * "Evaluate my current todos using the Eisenhower matrix."
 * "Help me conduct a GTD-style weekly review using Things."
 
@@ -297,13 +297,9 @@ This interactive script will prompt you for your token and save it securely in y
 
 This project uses `pyproject.toml` to manage dependencies and build configuration. It's built using the [Model Context Protocol](https://modelcontextprotocol.io), which allows Claude to securely access tools and data.
 
-### Implementation Options
+### Implementation
 
-This project provides two different implementation approaches:
-
-1. **Standard MCP Server** (`things_server.py`) - The original implementation that uses the basic MCP server pattern.
-
-2. **FastMCP Server** (`things_fast_server.py`) - A modern implementation using the FastMCP pattern for cleaner, more maintainable code with decorator-based tool registration.
+This project uses `things_fast_server.py` as the active entry point, built on the FastMCP pattern for cleaner, more maintainable code with decorator-based tool registration.
 
 ### Development Workflow
 
@@ -324,11 +320,7 @@ uv pip install -e ".[dev]"  # Install in development mode with extra dependencie
 Use the MCP development server to test changes:
 
 ```bash
-# Test the FastMCP implementation
 mcp dev things_fast_server.py
-
-# Or test the traditional implementation
-mcp dev things_server.py
 ```
 
 #### Building the package for PyPI
@@ -351,7 +343,7 @@ Requires Python 3.12+.
 - **Retry Logic**: Automatic retries with exponential backoff for transient failures
 - **Circuit Breaker**: Prevents repeated failures from overwhelming the system
 - **Dead Letter Queue**: Failed operations are stored for later retry or analysis
-- **AppleScript Fallback**: When URL scheme operations fail, falls back to direct AppleScript
+- **AppleScript Bridge**: All write operations use direct AppleScript via `osascript` for reliable Things 3 modifications
 
 ### Performance Optimization
 - **Smart Caching**: Frequently accessed data is cached with appropriate TTLs
