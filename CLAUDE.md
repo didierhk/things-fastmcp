@@ -3,10 +3,12 @@
 ## Quick Start
 
 ```bash
-make setup   # create venv + install deps
+make setup   # create venv (python3.13) + install pinned deps
 make run     # preflight check + start server
-make test    # pytest
+make test    # pytest (31 tests)
 ```
+
+**Python:** 3.13.12 | **venv:** `.venv/bin/python3` | **Last maintenance:** 2026-03-17
 
 ## Architecture
 
@@ -71,33 +73,10 @@ make preflight  # quick import + dependency check
 
 ## Maintenance Tasks
 
-### PENDING: Migrate venv to Python 3.13
+### ✅ DONE: Migrated venv to Python 3.13 (2026-03-17)
 
-**Why:** Currently running Python 3.14.2 (pre-release). Zero 3.14-specific syntax in codebase — all files parse cleanly under 3.13. Pre-release Python means ecosystem wheels publish late, increasing breakage risk (root cause of Mar 2026 outage).
-
-**Steps (low-risk, ~5 min):**
-```bash
-cd /Users/didierh/projects/things-ca
-
-# 1. Destroy old venv
-rm -rf .venv
-
-# 2. Recreate with 3.13 (Homebrew has python3.13)
-python3.13 -m venv .venv
-
-# 3. Restore exact pinned deps
-.venv/bin/pip install -r requirements.txt
-.venv/bin/pip install -e .
-
-# 4. Verify
-make preflight   # must print "Preflight checks passed"
-make test        # must pass 31 tests
-
-# 5. No MCP config change needed — path is still .venv/bin/python3
-# 6. Restart Claude Desktop to pick up new venv
-```
-
-**Rollback:** If anything fails, `rm -rf .venv && python3.14 -m venv .venv && pip install -r requirements.txt`
+Python 3.14.2 → 3.13.12. Zero code changes required. 31/31 tests pass.
+MCP config path unchanged (still `.venv/bin/python3`). Claude Desktop restart required.
 
 ---
 

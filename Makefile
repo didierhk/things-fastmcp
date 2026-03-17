@@ -2,12 +2,12 @@
 
 VENV   := .venv
 PYTHON := $(VENV)/bin/python3
-PIP    := $(VENV)/bin/pip
+PIP    := $(PYTHON) -m pip
 
 setup:
-	python3 -m venv $(VENV)
-	$(PIP) install -e ".[dev]"
-	$(PIP) install pytest
+	python3.13 -m venv $(VENV)
+	$(PIP) install -r requirements.txt
+	$(PIP) install -e .
 	@echo "Setup complete. Run 'make run' to start server."
 
 run: preflight
