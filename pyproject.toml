@@ -21,8 +21,9 @@ classifiers = [
     "Operating System :: MacOS"
 ]
 dependencies = [
-    "mcp[cli]>=1.2.0",
-    "things-py>=0.0.15",
+    "mcp[cli]~=1.26.0",
+    "things-py~=1.0.1",
+    "pydantic~=2.12.5",
 ]
 
 [project.scripts]

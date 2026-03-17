@@ -282,6 +282,33 @@ class RateLimiter:
         return wrapper
 
 
+def reliable_tool(func: Callable) -> Callable:
+    """Decorator: rate limit + circuit breaker + DLQ capture for write operations.
+
+    Apply to any MCP tool that mutates Things data. Wraps the function with:
+    - Rate limiting (throttles bursts)
+    - Circuit breaker (stops hammering a broken Things app)
+    - Dead letter queue (captures failures for post-mortem)
+    """
+    from functools import wraps
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        rate_limiter.wait_if_needed()
+        if not circuit_breaker.allow_operation():
+            raise RuntimeError("Circuit breaker OPEN — Things integration temporarily unavailable")
+        try:
+            result = func(*args, **kwargs)
+            circuit_breaker.record_success()
+            return result
+        except Exception as e:
+            circuit_breaker.record_failure()
+            dead_letter_queue.add_failed_operation(func.__name__, {"args": str(args), "kwargs": str(kwargs)}, e)
+            raise
+
+    return wrapper
+
+
 def get_auth_token() -> Optional[str]:
     """Get the Things authentication token from various possible sources.
     

@@ -15,6 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
+    from src.things_mcp.preflight import check as preflight_check
+    preflight_check()
     logger.info("Starting Things FastMCP Server")
     try:
         run_things_mcp_server()

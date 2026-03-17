@@ -14,8 +14,8 @@ import mcp.types as types
 
 # Import supporting modules
 from .formatters import format_todo, format_project, format_area, format_tag
-from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter
-from .url_scheme import show, search, launch_things
+from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter, reliable_tool
+from .url_scheme import show, search, launch_things, execute_url
 from .applescript_bridge import (
     add_todo_direct, update_todo_direct,
     add_project_direct, update_project_direct
@@ -305,6 +305,7 @@ def search_advanced(
 # MODIFICATION OPERATIONS
 
 @mcp.tool(name="add-todo")
+@reliable_tool
 def add_task(
     title: str,
     notes: Optional[str] = None,
@@ -341,12 +342,19 @@ def add_task(
         if not task_id:
             return f"Error: Failed to create todo: {title}"
         invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-todos"])
+        # Verification: confirm the todo actually landed in Things
+        verified = things.get(task_id)
+        if not verified:
+            logger.warning(f"Write verification failed: todo {task_id} not found after creation")
+        else:
+            logger.debug(f"Write verified: todo {task_id} confirmed in Things")
         return f"Successfully created todo: {title} (ID: {task_id})"
     except Exception as e:
         logger.error(f"Error creating todo: {str(e)}")
         return f"Error creating todo: {str(e)}"
 
 @mcp.tool(name="add-project")
+@reliable_tool
 def add_new_project(
     title: str,
     notes: Optional[str] = None,
@@ -389,6 +397,7 @@ def add_new_project(
         return f"Error creating project: {str(e)}"
 
 @mcp.tool(name="update-todo")
+@reliable_tool
 def update_task(
     id: str,
     title: Optional[str] = None,
@@ -426,12 +435,19 @@ def update_task(
         if not success:
             return f"Error: Failed to update todo with ID: {id}"
         invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-anytime", "get-todos"])
+        # Verification: confirm the todo still exists after update
+        verified = things.get(id)
+        if not verified:
+            logger.warning(f"Write verification failed: todo {id} not found after update")
+        else:
+            logger.debug(f"Write verified: todo {id} confirmed in Things")
         return f"Successfully updated todo with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating todo: {str(e)}")
         return f"Error updating todo: {str(e)}"
 
 @mcp.tool(name="update-project")
+@reliable_tool
 def update_existing_project(
     id: str,
     title: Optional[str] = None,
@@ -494,16 +510,13 @@ def show_item(
             if not launch_things():
                 return "Error: Unable to launch Things app"
                 
-        # Execute the show URL command
-        result = show(
-            id=id,
-            query=query,
-            filter_tags=filter_tags
-        )
-        
+        # Build and execute the show URL
+        url = show(id=id, query=query, filter_tags=filter_tags)
+        result = execute_url(url)
+
         if not result:
             return f"Error: Failed to show item/list '{id}'"
-            
+
         return f"Successfully opened '{id}' in Things"
     except Exception as e:
         logger.error(f"Error showing item: {str(e)}")
@@ -523,12 +536,13 @@ def search_all_items(query: str) -> str:
             if not launch_things():
                 return "Error: Unable to launch Things app"
                 
-        # Execute the search URL command
-        result = search(query=query)
-        
+        # Build and execute the search URL
+        url = search(query=query)
+        result = execute_url(url)
+
         if not result:
             return f"Error: Failed to search for '{query}'"
-            
+
         return f"Successfully searched for '{query}' in Things"
     except Exception as e:
         logger.error(f"Error searching: {str(e)}")
