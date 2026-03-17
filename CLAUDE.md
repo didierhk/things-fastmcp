@@ -53,18 +53,12 @@ Key pinned versions (pydantic drift caused 4-day silent outage Mar 2026):
 - `mcp~=1.26.0`
 - Full lock: `requirements.txt`
 
-## Python Version Note
-
-Code has zero Python 3.14-specific syntax — all files parse cleanly under 3.13.
-**Consider switching to Python 3.13** for broader ecosystem wheel support.
-3.14 is pre-release; wheels publish late, increasing breakage risk.
-
 ## Testing
 
 ```bash
 make test       # runs pytest tests/
 make preflight  # quick import + dependency check
-./health_check.sh   # standalone import verification
+./health_check.sh   # standalone import verification (exit 0 = healthy)
 ```
 
 ## Files NOT to modify without care
@@ -72,3 +66,100 @@ make preflight  # quick import + dependency check
 - `utils.py` reliability classes — shared by url_scheme and fast_server
 - `url_scheme.py` — Things URL spec compliance, encoding is finicky
 - `applescript_bridge.py` — tested AppleScript syntax; wrong syntax causes error -2741
+
+---
+
+## Maintenance Tasks
+
+### PENDING: Migrate venv to Python 3.13
+
+**Why:** Currently running Python 3.14.2 (pre-release). Zero 3.14-specific syntax in codebase — all files parse cleanly under 3.13. Pre-release Python means ecosystem wheels publish late, increasing breakage risk (root cause of Mar 2026 outage).
+
+**Steps (low-risk, ~5 min):**
+```bash
+cd /Users/didierh/projects/things-ca
+
+# 1. Destroy old venv
+rm -rf .venv
+
+# 2. Recreate with 3.13 (Homebrew has python3.13)
+python3.13 -m venv .venv
+
+# 3. Restore exact pinned deps
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -e .
+
+# 4. Verify
+make preflight   # must print "Preflight checks passed"
+make test        # must pass 31 tests
+
+# 5. No MCP config change needed — path is still .venv/bin/python3
+# 6. Restart Claude Desktop to pick up new venv
+```
+
+**Rollback:** If anything fails, `rm -rf .venv && python3.14 -m venv .venv && pip install -r requirements.txt`
+
+---
+
+### Routine: Updating dependencies
+
+When you need to update a dep (e.g., `mcp` publishes a new version):
+
+```bash
+# 1. Install the new version
+.venv/bin/pip install "mcp~=X.Y.0"
+
+# 2. Verify nothing broke
+make preflight && make test
+
+# 3. Lock the new state
+make freeze    # updates requirements.txt
+git add requirements.txt pyproject.toml && git commit -m "chore: update mcp to X.Y.0"
+```
+
+**Never** update a dep without running `make preflight && make test` first.
+
+---
+
+### Routine: After any system Python upgrade or pyenv change
+
+The venv is self-contained — system Python changes don't affect it.
+But if you recreate the venv (e.g., after wiping `.venv`):
+
+```bash
+python3.13 -m venv .venv              # always use 3.13 (or current stable)
+.venv/bin/pip install -r requirements.txt  # exact pinned state
+.venv/bin/pip install -e .            # install project itself
+make preflight                         # confirm healthy
+```
+
+---
+
+### Diagnosing a broken MCP server
+
+If the Things MCP server stops working in Claude Desktop:
+
+```bash
+# Step 1: Run health check
+./health_check.sh
+# Exit 0 = deps OK, Things running. Problem is elsewhere.
+# Exit 1 = deps broken. See error message.
+
+# Step 2: Verify MCP config python path
+python3 -c "
+import json, os
+cfg = json.load(open(os.path.expanduser(
+  '~/Library/Application Support/Claude/claude_desktop_config.json')))
+print(cfg['mcpServers']['things']['command'])
+"
+# Must be: /Users/didierh/projects/things-ca/.venv/bin/python3
+
+# Step 3: Test server startup directly
+timeout 5 /Users/didierh/projects/things-ca/.venv/bin/python3 \
+  /Users/didierh/projects/things-ca/things_fast_server.py 2>&1 | head -10
+# Must show "Preflight checks passed" and "Things app is running"
+
+# Step 4: If pydantic error, restore from lock file
+cd /Users/didierh/projects/things-ca
+pip install -r requirements.txt
+```
