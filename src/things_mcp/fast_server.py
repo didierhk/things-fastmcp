@@ -14,10 +14,11 @@ import mcp.types as types
 
 # Import supporting modules
 from .formatters import format_todo, format_project, format_area, format_tag
-from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter
-from .url_scheme import (
-    add_todo, add_project, update_todo, update_project, show, 
-    search, launch_things, execute_url
+from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter, reliable_tool
+from .url_scheme import show, search, launch_things, execute_url
+from .applescript_bridge import (
+    add_todo_direct, update_todo_direct,
+    add_project_direct, update_project_direct
 )
 
 # Import and configure enhanced logging
@@ -31,9 +32,8 @@ logger = get_logger(__name__)
 
 # Create the FastMCP server
 mcp = FastMCP(
-    "Things", 
-    description="Interact with the Things task management app",
-    version="0.1.1"
+    "Things",
+    instructions="Interact with the Things task management app",
 )
 
 # LIST VIEWS
@@ -305,6 +305,7 @@ def search_advanced(
 # MODIFICATION OPERATIONS
 
 @mcp.tool(name="add-todo")
+@reliable_tool
 def add_task(
     title: str,
     notes: Optional[str] = None,
@@ -331,36 +332,29 @@ def add_task(
         heading: Heading to add under
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the add_todo URL command
-        result = add_todo(
+        task_id = add_todo_direct(
             title=title,
             notes=notes,
             when=when,
-            deadline=deadline,
             tags=tags,
-            checklist_items=checklist_items,
-            list_id=list_id,
-            list_title=list_title,
-            heading=heading
+            list_title=list_title
         )
-        
-        if not result:
-            return "Error: Failed to create todo"
-        
-        # Invalidate relevant caches after creating a todo
+        if not task_id:
+            return f"Error: Failed to create todo: {title}"
         invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-todos"])
-            
-        return f"Successfully created todo: {title}"
+        # Verification: confirm the todo actually landed in Things
+        verified = things.get(task_id)
+        if not verified:
+            logger.warning(f"Write verification failed: todo {task_id} not found after creation")
+        else:
+            logger.debug(f"Write verified: todo {task_id} confirmed in Things")
+        return f"Successfully created todo: {title} (ID: {task_id})"
     except Exception as e:
         logger.error(f"Error creating todo: {str(e)}")
         return f"Error creating todo: {str(e)}"
 
 @mcp.tool(name="add-project")
+@reliable_tool
 def add_new_project(
     title: str,
     notes: Optional[str] = None,
@@ -385,32 +379,25 @@ def add_new_project(
         todos: Initial todos to create in the project
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the add_project URL command
-        result = add_project(
+        project_id = add_project_direct(
             title=title,
             notes=notes,
             when=when,
             deadline=deadline,
             tags=tags,
-            area_id=area_id,
             area_title=area_title,
             todos=todos
         )
-        
-        if not result:
-            return "Error: Failed to create project"
-            
-        return f"Successfully created project: {title}"
+        if not project_id:
+            return f"Error: Failed to create project: {title}"
+        invalidate_caches_for(["get-projects", "get-today", "get-upcoming", "get-anytime"])
+        return f"Successfully created project: {title} (ID: {project_id})"
     except Exception as e:
         logger.error(f"Error creating project: {str(e)}")
         return f"Error creating project: {str(e)}"
 
 @mcp.tool(name="update-todo")
+@reliable_tool
 def update_task(
     id: str,
     title: Optional[str] = None,
@@ -435,13 +422,7 @@ def update_task(
         canceled: Mark as canceled
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the update_todo URL command
-        result = update_todo(
+        success = update_todo_direct(
             id=id,
             title=title,
             notes=notes,
@@ -451,16 +432,22 @@ def update_task(
             completed=completed,
             canceled=canceled
         )
-        
-        if not result:
-            return "Error: Failed to update todo"
-            
+        if not success:
+            return f"Error: Failed to update todo with ID: {id}"
+        invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-anytime", "get-todos"])
+        # Verification: confirm the todo still exists after update
+        verified = things.get(id)
+        if not verified:
+            logger.warning(f"Write verification failed: todo {id} not found after update")
+        else:
+            logger.debug(f"Write verified: todo {id} confirmed in Things")
         return f"Successfully updated todo with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating todo: {str(e)}")
         return f"Error updating todo: {str(e)}"
 
 @mcp.tool(name="update-project")
+@reliable_tool
 def update_existing_project(
     id: str,
     title: Optional[str] = None,
@@ -485,13 +472,7 @@ def update_existing_project(
         canceled: Mark as canceled
     """
     try:
-        # Ensure Things app is running
-        if not app_state.update_app_state():
-            if not launch_things():
-                return "Error: Unable to launch Things app"
-                
-        # Execute the update_project URL command
-        result = update_project(
+        success = update_project_direct(
             id=id,
             title=title,
             notes=notes,
@@ -501,10 +482,9 @@ def update_existing_project(
             completed=completed,
             canceled=canceled
         )
-        
-        if not result:
-            return "Error: Failed to update project"
-            
+        if not success:
+            return f"Error: Failed to update project with ID: {id}"
+        invalidate_caches_for(["get-projects", "get-today", "get-upcoming", "get-anytime"])
         return f"Successfully updated project with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating project: {str(e)}")
@@ -536,10 +516,10 @@ def show_item(
             query=query,
             filter_tags=filter_tags
         )
-        
+
         if not result:
             return f"Error: Failed to show item/list '{id}'"
-            
+
         return f"Successfully opened '{id}' in Things"
     except Exception as e:
         logger.error(f"Error showing item: {str(e)}")
@@ -561,10 +541,10 @@ def search_all_items(query: str) -> str:
                 
         # Execute the search URL command
         result = search(query=query)
-        
+
         if not result:
             return f"Error: Failed to search for '{query}'"
-            
+
         return f"Successfully searched for '{query}' in Things"
     except Exception as e:
         logger.error(f"Error searching: {str(e)}")

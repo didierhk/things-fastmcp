@@ -5,7 +5,7 @@ This version uses the modern FastMCP pattern for better maintainability.
 """
 import logging
 import sys
-from src.things_mcp.fast_server import run_things_mcp_server
+from src.things_mcp.fast_server import run_things_mcp_server, mcp
 
 # Configure logging
 logging.basicConfig(
@@ -15,6 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
+    from src.things_mcp.preflight import check as preflight_check
+    preflight_check()
     logger.info("Starting Things FastMCP Server")
     try:
         run_things_mcp_server()
