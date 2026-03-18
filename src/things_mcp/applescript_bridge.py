@@ -36,20 +36,27 @@ def run_applescript(script: str, timeout: int = 10) -> Union[str, bool]:
         return False
 
 def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str] = None,
-                   tags: Optional[List[str]] = None, list_title: Optional[str] = None) -> str:
+                   tags: Optional[List[str]] = None, list_title: Optional[str] = None,
+                   list_id: Optional[str] = None, deadline: Optional[str] = None,
+                   checklist_items: Optional[List[str]] = None) -> str:
     """Add a todo to Things directly using AppleScript.
-    
+
     This bypasses URL schemes entirely to avoid encoding issues.
-    
+
     Args:
         title: Title of the todo
         notes: Notes for the todo
         when: When to schedule the todo (today, tomorrow, evening, anytime, someday)
         tags: Tags to apply to the todo
-        list_title: Name of project/area to add to
-        
+        list_title: Name of project/area to add to (matched by name)
+        list_id: UUID of project/area to add to (takes precedence over list_title)
+        deadline: Deadline for the todo (YYYY-MM-DD)
+        checklist_items: List of checklist item titles to add
+
     Returns:
         ID of the created todo if successful, False otherwise
+
+    Note: The 'heading' parameter is not supported via AppleScript.
     """
     # Build the AppleScript command
     script_parts = ['tell application "Things3"']
@@ -103,9 +110,41 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         script_parts.append('  end try')
         script_parts.append('end try')
     
+    # Add to project/area by UUID (takes precedence over list_title)
+    if list_id:
+        escaped_id = escape_applescript_string(list_id)
+        script_parts.append(f'try')
+        script_parts.append(f'  set target_project to first project whose id is "{escaped_id}"')
+        script_parts.append(f'  set project of newTodo to target_project')
+        script_parts.append(f'on error')
+        script_parts.append(f'  try')
+        script_parts.append(f'    set target_area to first area whose id is "{escaped_id}"')
+        script_parts.append(f'    set area of newTodo to target_area')
+        script_parts.append(f'  on error')
+        script_parts.append(f'    -- ID not found, todo will remain in inbox')
+        script_parts.append(f'  end try')
+        script_parts.append(f'end try')
+
+    # Set deadline
+    if deadline:
+        import re
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
+            y, m, d = deadline.split('-')
+            script_parts.append(f'set deadlineDate to current date')
+            script_parts.append(f'set year of deadlineDate to {y}')
+            script_parts.append(f'set month of deadlineDate to {int(m)}')
+            script_parts.append(f'set day of deadlineDate to {int(d)}')
+            script_parts.append(f'set due date of newTodo to deadlineDate')
+
+    # Add checklist items
+    if checklist_items:
+        for item in checklist_items:
+            escaped_item = escape_applescript_string(item)
+            script_parts.append(f'tell newTodo to make new check list item with properties {{name:"{escaped_item}"}}')
+
     # Get the ID of the created todo
     script_parts.append('return id of newTodo')
-    
+
     # Close the tell block
     script_parts.append('end tell')
     
@@ -123,7 +162,8 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
 
 def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[str] = None,
                        deadline: Optional[str] = None, tags: Optional[List[str]] = None,
-                       area_title: Optional[str] = None, todos: Optional[List[str]] = None) -> Union[str, bool]:
+                       area_title: Optional[str] = None, area_id: Optional[str] = None,
+                       todos: Optional[List[str]] = None) -> Union[str, bool]:
     """Create a project in Things directly using AppleScript.
 
     Args:
@@ -169,7 +209,15 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
         for tag in tags:
             script_parts.append(f'tell newProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
 
-    if area_title:
+    if area_id:
+        escaped_aid = escape_applescript_string(area_id)
+        script_parts.append('try')
+        script_parts.append(f'  set target_area to first area whose id is "{escaped_aid}"')
+        script_parts.append('  set area of newProject to target_area')
+        script_parts.append('on error')
+        script_parts.append('  -- area_id not found, project will remain unassigned')
+        script_parts.append('end try')
+    elif area_title:
         script_parts.append(f'set area_name to "{escape_applescript_string(area_title)}"')
         script_parts.append('try')
         script_parts.append('  set target_area to first area whose name is area_name')
@@ -259,13 +307,16 @@ def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[
         for tag in tags:
             script_parts.append(f'    tell theProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
 
+    if completed and canceled:
+        logger.warning("Both completed and canceled set — completed takes precedence")
+        canceled = None
+
     if completed is not None:
         if completed:
             script_parts.append('    set status of theProject to completed')
         else:
             script_parts.append('    set status of theProject to open')
-
-    if canceled is not None:
+    elif canceled is not None:
         if canceled:
             script_parts.append('    set status of theProject to canceled')
         else:
@@ -473,15 +524,17 @@ def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str
     end repeat
 ''')
     
-    # Handle completion status - use completion date approach
+    # Handle completion/canceled status — mutually exclusive
+    if completed and canceled:
+        logger.warning("Both completed and canceled set — completed takes precedence")
+        canceled = None
+
     if completed is not None:
         if completed:
             script_parts.append('    set status of theTodo to completed')
         else:
             script_parts.append('    set status of theTodo to open')
-    
-    # Handle canceled status
-    if canceled is not None:
+    elif canceled is not None:
         if canceled:
             script_parts.append('    set status of theTodo to canceled')
         else:

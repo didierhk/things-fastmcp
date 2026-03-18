@@ -16,7 +16,16 @@ def check() -> None:
     try:
         import pydantic
         import pydantic_core  # noqa: F401
-        pydantic.version._ensure_pydantic_core_version()
+        # _ensure_pydantic_core_version is a private API; guard against removal
+        checker = getattr(pydantic.version, "_ensure_pydantic_core_version", None)
+        if checker:
+            checker()
+        else:
+            # Fallback: verify pydantic can actually instantiate a model
+            from pydantic import BaseModel
+            class _Probe(BaseModel):
+                x: int
+            _Probe(x=1)
     except Exception as e:
         errors.append(f"Pydantic version mismatch: {e}")
 

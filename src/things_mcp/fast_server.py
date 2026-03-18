@@ -337,7 +337,10 @@ def add_task(
             notes=notes,
             when=when,
             tags=tags,
-            list_title=list_title
+            list_title=list_title,
+            list_id=list_id,
+            deadline=deadline,
+            checklist_items=checklist_items
         )
         if not task_id:
             return f"Error: Failed to create todo: {title}"
@@ -386,6 +389,7 @@ def add_new_project(
             deadline=deadline,
             tags=tags,
             area_title=area_title,
+            area_id=area_id,
             todos=todos
         )
         if not project_id:
