@@ -131,14 +131,12 @@ cfg = json.load(open(os.path.expanduser(
   '~/Library/Application Support/Claude/claude_desktop_config.json')))
 print(cfg['mcpServers']['things']['command'])
 "
-# Must be: /Users/didierh/projects/things-ca/.venv/bin/python3
+# Must be: /path/to/things-ca/.venv/bin/python3
 
 # Step 3: Test server startup directly
-timeout 5 /Users/didierh/projects/things-ca/.venv/bin/python3 \
-  /Users/didierh/projects/things-ca/things_fast_server.py 2>&1 | head -10
+timeout 5 .venv/bin/python3 things_fast_server.py 2>&1 | head -10
 # Must show "Preflight checks passed" and "Things app is running"
 
 # Step 4: If pydantic error, restore from lock file
-cd /Users/didierh/projects/things-ca
 pip install -r requirements.txt
 ```

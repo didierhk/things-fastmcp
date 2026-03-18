@@ -1,13 +1,14 @@
 [project]
 name = "things3-enhanced-mcp"
-version = "1.0.0"
+version = "1.1.0"
 description = "Enhanced FastMCP server for Things 3 app integration with Claude Desktop and Windsurf - featuring reliability improvements, caching, and AppleScript bridge"
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "MIT License"}
 authors = [
     {name = "Yaroslav Krempovych", email = "51231325+excelsior@users.noreply.github.com"},
-    {name = "Harald Lindstrøm", email = "hald@users.noreply.github.com"}
+    {name = "Harald Lindstrøm", email = "hald@users.noreply.github.com"},
+    {name = "didierhk", email = "8818210+didierhk@users.noreply.github.com"}
 ]
 keywords = ["mcp", "anthropic", "claude", "things3", "things", "task-management", "productivity", "fastmcp", "macos", "apple"]
 classifiers = [

@@ -3,7 +3,7 @@
 # Verifies the venv interpreter can import all critical dependencies.
 # Exit 0 = healthy, exit 1 = broken.
 
-PYTHON="/Users/didierh/projects/things-ca/.venv/bin/python3"
+PYTHON="$(dirname "$0")/.venv/bin/python3"
 
 if [[ ! -x "$PYTHON" ]]; then
   echo "FAIL: venv python not found at $PYTHON" >&2
