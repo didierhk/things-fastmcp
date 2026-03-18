@@ -299,7 +299,14 @@ def reliable_tool(func: Callable) -> Callable:
             raise RuntimeError("Circuit breaker OPEN — Things integration temporarily unavailable")
         try:
             result = func(*args, **kwargs)
-            circuit_breaker.record_success()
+            # Bridge functions return False or error strings on failure rather than raising.
+            # Detect these so the circuit breaker trips correctly.
+            if result is False or (isinstance(result, str) and result.startswith("Error:")):
+                err = Exception(f"Tool returned failure: {result}")
+                circuit_breaker.record_failure()
+                dead_letter_queue.add_failed_operation(func.__name__, {"args": str(args), "kwargs": str(kwargs)}, err)
+            else:
+                circuit_breaker.record_success()
             return result
         except Exception as e:
             circuit_breaker.record_failure()

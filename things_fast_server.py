@@ -5,7 +5,7 @@ This version uses the modern FastMCP pattern for better maintainability.
 """
 import logging
 import sys
-from src.things_mcp.fast_server import run_things_mcp_server, mcp
+from src.things_mcp.fast_server import run_things_mcp_server
 
 # Configure logging
 logging.basicConfig(
