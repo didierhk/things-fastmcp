@@ -530,16 +530,13 @@ def show_item(
             if not launch_things():
                 return "Error: Unable to launch Things app"
                 
-        # Execute the show URL command
-        result = show(
-            id=id,
-            query=query,
-            filter_tags=filter_tags
-        )
-        
+        # Build and execute the show URL
+        url = show(id=id, query=query, filter_tags=filter_tags)
+        result = execute_url(url)
+
         if not result:
             return f"Error: Failed to show item/list '{id}'"
-            
+
         return f"Successfully opened '{id}' in Things"
     except Exception as e:
         logger.error(f"Error showing item: {str(e)}")
@@ -559,12 +556,13 @@ def search_all_items(query: str) -> str:
             if not launch_things():
                 return "Error: Unable to launch Things app"
                 
-        # Execute the search URL command
-        result = search(query=query)
-        
+        # Build and execute the search URL
+        url = search(query=query)
+        result = execute_url(url)
+
         if not result:
             return f"Error: Failed to search for '{query}'"
-            
+
         return f"Successfully searched for '{query}' in Things"
     except Exception as e:
         logger.error(f"Error searching: {str(e)}")
