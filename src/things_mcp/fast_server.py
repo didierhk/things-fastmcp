@@ -24,7 +24,7 @@ from .applescript_bridge import (
 # Import and configure enhanced logging
 from .logging_config import setup_logging, get_logger, log_operation_start, log_operation_end
 # Import caching
-from .cache import cached, invalidate_caches_for, get_cache_stats, CACHE_TTL
+from .cache import cached, invalidate_caches_for, get_cache_stats, stop_cache_cleanup_task, CACHE_TTL
 
 # Configure enhanced logging
 setup_logging(console_level="INFO", file_level="DEBUG", structured_logs=True)
@@ -614,8 +614,15 @@ def run_things_mcp_server():
     else:
         logger.info("Things app is running and ready for operations")
         
+    # Log registered tool count — makes missing/broken tool registrations immediately visible
+    tool_count = len(mcp._tool_manager._tools)
+    logger.info(f"Registered {tool_count} tools")
+
     # Run the MCP server
-    mcp.run()
+    try:
+        mcp.run()
+    finally:
+        stop_cache_cleanup_task()
 
 if __name__ == "__main__":
     run_things_mcp_server()

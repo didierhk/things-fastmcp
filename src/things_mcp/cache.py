@@ -7,6 +7,7 @@ import time
 import json
 import hashlib
 import logging
+import threading
 from typing import Any, Dict, Optional, Callable, Tuple
 from functools import wraps
 from threading import Lock
@@ -222,19 +223,44 @@ CACHE_TTL = {
     "trash": 300,         # 5 minutes
 }
 
-# Auto-cleanup task
-def start_cache_cleanup_task(interval: int = 300):
-    """Start a background task to clean up expired cache entries."""
-    import threading
-    
-    def cleanup_task():
-        while True:
-            time.sleep(interval)
+# Auto-cleanup task — tracked globally to prevent duplicate threads on reconnect
+_cleanup_thread: Optional[threading.Thread] = None
+_cleanup_stop_event: Optional[threading.Event] = None
+
+
+def start_cache_cleanup_task(interval: int = 300) -> None:
+    """Start a background task to clean up expired cache entries.
+
+    Idempotent — safe to call multiple times; will not start a second thread
+    if one is already running.
+    """
+    global _cleanup_thread, _cleanup_stop_event
+
+    if _cleanup_thread is not None and _cleanup_thread.is_alive():
+        logger.debug("Cache cleanup task already running, skipping duplicate start")
+        return
+
+    stop_event = threading.Event()
+    _cleanup_stop_event = stop_event
+
+    def cleanup_task() -> None:
+        while not stop_event.wait(timeout=interval):
             _cache.cleanup_expired()
-    
-    thread = threading.Thread(target=cleanup_task, daemon=True)
-    thread.start()
+
+    _cleanup_thread = threading.Thread(target=cleanup_task, daemon=True, name="cache-cleanup")
+    _cleanup_thread.start()
     logger.info(f"Started cache cleanup task with {interval}s interval")
+
+
+def stop_cache_cleanup_task() -> None:
+    """Signal the cache cleanup thread to stop and log confirmation."""
+    global _cleanup_stop_event
+    if _cleanup_stop_event is not None:
+        _cleanup_stop_event.set()
+        logger.info("Cache cleanup task cancelled")
+    else:
+        logger.debug("No cache cleanup task to cancel")
+
 
 # Start cleanup task when module is imported
 start_cache_cleanup_task()

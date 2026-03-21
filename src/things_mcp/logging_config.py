@@ -7,6 +7,7 @@ import logging
 import logging.handlers
 import os
 import json
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -69,8 +70,16 @@ class OperationLogFilter(logging.Filter):
             setattr(record, key, value)
         return True
 
+# Session UUID — unique per process invocation, included in all log lines for
+# correlation across Python logs and Claude.ai MCP client proxy logs
+SESSION_ID = str(uuid.uuid4())[:8]
+
 # Global operation filter instance
 operation_filter = OperationLogFilter()
+
+# Idempotency guard — prevents double-initialization when module is imported
+# from multiple paths (e.g., things_fast_server.py + fast_server.py both import it)
+_initialized = False
 
 def setup_logging(
     console_level: str = "INFO",
@@ -89,18 +98,22 @@ def setup_logging(
         max_bytes: Maximum size of log files before rotation
         backup_count: Number of backup files to keep
     """
+    global _initialized
+    if _initialized:
+        return
+
     # Get the root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)  # Capture everything, filter at handler level
-    
+
     # Remove existing handlers
     root_logger.handlers.clear()
     
-    # Console handler with simple formatting
+    # Console handler with simple formatting (includes session ID for log correlation)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(getattr(logging, console_level.upper()))
     console_format = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        f'%(asctime)s [{SESSION_ID}] - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     console_handler.setFormatter(console_format)
@@ -146,9 +159,12 @@ def setup_logging(
     error_file_handler.addFilter(operation_filter)
     root_logger.addHandler(error_file_handler)
     
+    _initialized = True
+
     # Log the logging configuration
     logger = logging.getLogger(__name__)
     logger.info(f"Logging configured - Console: {console_level}, File: {file_level}, Structured: {structured_logs}")
+    logger.info(f"Session ID: {SESSION_ID} — use this to correlate Python logs with MCP proxy logs")
     logger.info(f"Log files location: {LOGS_DIR}")
 
 def log_operation_start(operation: str, **kwargs) -> None:
