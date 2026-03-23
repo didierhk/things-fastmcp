@@ -313,13 +313,11 @@ def add_task(
     deadline: Optional[str] = None,
     tags: Optional[List[str]] = None,
     checklist_items: Optional[List[str]] = None,
-    list_id: Optional[str] = None,
     list_title: Optional[str] = None,
-    heading: Optional[str] = None
 ) -> str:
     """
     Create a new todo in Things
-    
+
     Args:
         title: Title of the todo
         notes: Notes for the todo
@@ -327,21 +325,21 @@ def add_task(
         deadline: Deadline for the todo (YYYY-MM-DD)
         tags: Tags to apply to the todo
         checklist_items: Checklist items to add
-        list_id: ID of project/area to add to
         list_title: Title of project/area to add to
-        heading: Heading to add under
     """
     try:
         task_id = add_todo_direct(
             title=title,
             notes=notes,
             when=when,
+            deadline=deadline,
             tags=tags,
+            checklist_items=checklist_items,
             list_title=list_title
         )
         if not task_id:
             return f"Error: Failed to create todo: {title}"
-        invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-todos"])
+        invalidate_caches_for(["get_inbox", "get_today", "get_upcoming", "get_todos"])
         # Verification: confirm the todo actually landed in Things
         verified = things.get(task_id)
         if not verified:
@@ -390,7 +388,7 @@ def add_new_project(
         )
         if not project_id:
             return f"Error: Failed to create project: {title}"
-        invalidate_caches_for(["get-projects", "get-today", "get-upcoming", "get-anytime"])
+        invalidate_caches_for(["get_projects", "get_today", "get_upcoming", "get_anytime"])
         return f"Successfully created project: {title} (ID: {project_id})"
     except Exception as e:
         logger.error(f"Error creating project: {str(e)}")
@@ -434,7 +432,7 @@ def update_task(
         )
         if not success:
             return f"Error: Failed to update todo with ID: {id}"
-        invalidate_caches_for(["get-inbox", "get-today", "get-upcoming", "get-anytime", "get-todos"])
+        invalidate_caches_for(["get_inbox", "get_today", "get_upcoming", "get_anytime", "get_todos"])
         # Verification: confirm the todo still exists after update
         verified = things.get(id)
         if not verified:
@@ -484,7 +482,7 @@ def update_existing_project(
         )
         if not success:
             return f"Error: Failed to update project with ID: {id}"
-        invalidate_caches_for(["get-projects", "get-today", "get-upcoming", "get-anytime"])
+        invalidate_caches_for(["get_projects", "get_today", "get_upcoming", "get_anytime"])
         return f"Successfully updated project with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating project: {str(e)}")

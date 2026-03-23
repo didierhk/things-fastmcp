@@ -36,34 +36,40 @@ def run_applescript(script: str, timeout: int = 10) -> Union[str, bool]:
         return False
 
 def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str] = None,
-                   tags: Optional[List[str]] = None, list_title: Optional[str] = None) -> str:
+                   deadline: Optional[str] = None, tags: Optional[List[str]] = None,
+                   checklist_items: Optional[List[str]] = None,
+                   list_title: Optional[str] = None) -> str:
     """Add a todo to Things directly using AppleScript.
-    
+
     This bypasses URL schemes entirely to avoid encoding issues.
-    
+
     Args:
         title: Title of the todo
         notes: Notes for the todo
         when: When to schedule the todo (today, tomorrow, evening, anytime, someday)
+        deadline: Deadline in YYYY-MM-DD format
         tags: Tags to apply to the todo
+        checklist_items: List of checklist item titles
         list_title: Name of project/area to add to
-        
+
     Returns:
         ID of the created todo if successful, False otherwise
     """
+    import re
+
     # Build the AppleScript command
     script_parts = ['tell application "Things3"']
-    
+
     # Create the todo with properties
     properties = []
     properties.append(f'name:"{escape_applescript_string(title)}"')
-    
+
     if notes:
         properties.append(f'notes:"{escape_applescript_string(notes)}"')
-    
+
     # Create with properties in the right way
     script_parts.append(f'set newTodo to make new to do with properties {{{", ".join(properties)}}}')
-    
+
     # Add scheduling
     if when:
         when_mapping = {
@@ -73,20 +79,29 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
             'anytime': '',  # Default
             'someday': 'set status of newTodo to someday'
         }
-        
+
         if when in when_mapping:
             if when_mapping[when]:
                 script_parts.append(when_mapping[when])
         else:
-            # For date handling, it's safest to just log it and not try to set it
-            # This avoids AppleScript date formatting issues
             logger.warning(f"Custom date format '{when}' not supported, defaulting to today")
-    
+
+    # Add deadline if provided
+    if deadline and re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
+        script_parts.append(f'set deadline of newTodo to date "{deadline}"')
+    elif deadline:
+        logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
+
     # Add tags if provided
     if tags and len(tags) > 0:
         for tag in tags:
             script_parts.append(f'tell newTodo to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
-    
+
+    # Add checklist items if provided
+    if checklist_items:
+        for item in checklist_items:
+            script_parts.append(f'tell newTodo to make new check list item with properties {{name:"{escape_applescript_string(item)}"}}')
+
     # Add to a specific project/area if specified
     if list_title:
         script_parts.append(f'set project_name to "{escape_applescript_string(list_title)}"')
@@ -102,10 +117,10 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         script_parts.append('    -- Neither project nor area found, todo will remain in inbox')
         script_parts.append('  end try')
         script_parts.append('end try')
-    
+
     # Get the ID of the created todo
     script_parts.append('return id of newTodo')
-    
+
     # Close the tell block
     script_parts.append('end tell')
     
@@ -292,18 +307,26 @@ def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[
 
 def escape_applescript_string(text: str) -> str:
     """Escape special characters in an AppleScript string.
-    
+
+    Handles: double quotes (AppleScript-style doubling), backslashes,
+    and newlines/carriage returns (replaced with spaces to avoid splitting
+    the generated AppleScript across lines).
+
     Args:
         text: The string to escape
-        
+
     Returns:
         The escaped string
     """
     if not text:
         return ""
-    
-    # Escape quotes by doubling them (AppleScript style)
-    return text.replace('"', '""')
+
+    # Order matters: backslashes first, then quotes, then newlines
+    text = text.replace('\\', '\\\\')
+    text = text.replace('"', '""')
+    text = text.replace('\n', ' ')
+    text = text.replace('\r', ' ')
+    return text
 
 def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str] = None,
                      when: Optional[str] = None, deadline: Optional[str] = None,
@@ -334,7 +357,7 @@ def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str
     # Build the AppleScript command to find and update the todo
     script_parts = ['tell application "Things3"']
     script_parts.append('try')
-    script_parts.append(f'    set theTodo to to do id "{id}"')
+    script_parts.append(f'    set theTodo to to do id "{escape_applescript_string(id)}"')
     
     # Update properties one at a time
     if title:
@@ -395,10 +418,6 @@ def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str
             tags = [tags]
             
         if tags:
-            # Clear existing tags first
-            script_parts.append('    -- Clear existing tags')
-            script_parts.append('    set tag_names of theTodo to {}')
-            
             # Simplified tag handling
             import json
             tags_json = json.dumps(tags)
@@ -422,7 +441,10 @@ def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str
         else:
             # Clear all tags if empty list provided
             script_parts.append('    -- Clear all tags')
-            script_parts.append('    set tag_names of theTodo to {}')
+            script_parts.append('    set oldTags to tags of theTodo')
+            script_parts.append('    repeat with t from (count of oldTags) to 1 by -1')
+            script_parts.append('        delete item t of oldTags')
+            script_parts.append('    end repeat')
     
     # Handle adding tags without replacing existing ones
     if add_tags is not None:

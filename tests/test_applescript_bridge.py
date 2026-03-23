@@ -23,7 +23,13 @@ class TestEscapeApplescriptString:
         assert escape_applescript_string(None) == ""
 
     def test_backslash(self):
-        assert escape_applescript_string("path\\file") == "path\\file"
+        assert escape_applescript_string("path\\file") == "path\\\\file"
+
+    def test_newline_replaced_with_space(self):
+        assert escape_applescript_string("line1\nline2") == "line1 line2"
+
+    def test_carriage_return_replaced_with_space(self):
+        assert escape_applescript_string("line1\rline2") == "line1 line2"
 
 
 class TestRunApplescript:
