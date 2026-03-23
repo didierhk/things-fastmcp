@@ -5,10 +5,10 @@
 ```bash
 make setup   # create venv (python3.13) + install pinned deps
 make run     # preflight check + start server
-make test    # pytest (31 tests)
+make test    # pytest (33 tests)
 ```
 
-**Python:** 3.13.12 | **venv:** `.venv/bin/python3` | **Last maintenance:** 2026-03-17
+**Python:** 3.13.12 | **venv:** `.venv/bin/python3` | **Last maintenance:** 2026-03-21
 
 ## Architecture
 
@@ -72,6 +72,15 @@ make preflight  # quick import + dependency check
 ---
 
 ## Maintenance Tasks
+
+### ✅ DONE: v1.2.0 cleanup — bug fixes + dead code removal (2026-03-21)
+
+See CHANGELOG.md v1.2.0 for full details. Key changes:
+- Fixed cache invalidation key mismatch (use Python function names, not MCP tool names)
+- Fixed `escape_applescript_string` to handle newlines and backslashes
+- Wired `deadline` and `checklist_items` through `add-todo` (were silently dropped)
+- Removed 237 lines of dead code (tag_handler.py, old URL write funcs, broken retry_all)
+- Unified version strings across all config files to 1.2.0
 
 ### ✅ DONE: Migrated venv to Python 3.13 (2026-03-17)
 

@@ -5,6 +5,29 @@ All notable changes to Things 3 Enhanced MCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-21
+
+### Fixed
+- **Cache invalidation now works** — `invalidate_caches_for()` was using MCP tool names (`get-today`) but cache keys used Python function names (`get_today`). Keys never matched; stale data served until TTL expiry. All callers now use Python function names consistently.
+- **`escape_applescript_string` handles newlines** — newline/carriage-return characters in todo titles or notes previously split the generated AppleScript across lines, causing a syntax error and silent write failure. Now replaced with spaces.
+- **`update_todo_direct` escapes the `id` parameter** — was the only write function not escaping `id` before AppleScript interpolation (inconsistency with `update_project_direct`)
+- **Tag updates no longer fail** — removed `set tag_names of theTodo to {}` (invalid Things AppleScript property) that caused the outer `try/on error` to return `false` before the actual tag-clearing block could run. Empty tag list clearing now uses the correct `delete item` loop.
+- **`add-todo` now supports `deadline` and `checklist_items`** — these parameters were in the MCP tool signature but silently dropped before reaching `add_todo_direct`. Now wired through to AppleScript.
+
+### Removed
+- `tag_handler.py` — dead code, never imported
+- `validate_tool_registration()` in `utils.py` — never called
+- Old URL-scheme write functions in `url_scheme.py` (`add_todo`, `add_project`, `update_todo`, `update_project`) — replaced by AppleScript bridge in v1.1.0
+- `execute_xcallback_url()` in `url_scheme.py` — never called
+- Broken `DeadLetterQueue.retry_all()` — called nonexistent `retry_operation()`, replaced with `clear()`
+- `list_id` and `heading` params from `add-todo` MCP signature — not implementable via AppleScript bridge, were silently dropped
+
+### Changed
+- Version strings unified: `__init__.py`, `pyproject.toml`, `smithery.yaml` all at `1.2.0`
+- `smithery.yaml`: Python version corrected to 3.13, dependencies synced with `pyproject.toml` (removed stale `httpx`)
+- `pyproject.toml`: removed deleted `things_server.py` from sdist includes
+- Cleaned up unused imports in `utils.py` and `url_scheme.py`
+
 ## [1.1.0] - 2026-03-11
 
 ### Fixed

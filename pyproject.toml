@@ -1,6 +1,6 @@
 [project]
 name = "things3-enhanced-mcp"
-version = "1.1.0"
+version = "1.2.0"
 description = "Enhanced FastMCP server for Things 3 app integration with Claude Desktop and Windsurf - featuring reliability improvements, caching, and AppleScript bridge"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -48,8 +48,7 @@ include = [
     "README.md",
     "LICENSE",
     "pyproject.toml",
-    "things_fast_server.py",
-    "things_server.py"
+    "things_fast_server.py"
 ]
 
 [tool.hatch.envs.default]

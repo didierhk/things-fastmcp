@@ -7,9 +7,7 @@ import logging
 import os
 import platform
 import subprocess
-import urllib.parse
-import mcp.types as types
-from typing import Dict, Any, Optional, Callable, List, Union
+from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -83,43 +81,6 @@ class ThingsAppState:
             time.sleep(0.5)
         return False
 
-
-def validate_tool_registration(tools: list[types.Tool]) -> bool:
-    """
-    Validate that all required Things MCP tools are properly registered.
-    
-    Args:
-        tools: List of registered tools
-        
-    Returns:
-        bool: True if all required tools are registered, False otherwise
-    """
-    required_tool_names = [
-        "get-inbox", "get-today", "get-upcoming", "get-anytime",
-        "get-someday", "get-logbook", "get-trash", "get-todos",
-        "get-projects", "get-areas", "get-tags", "get-tagged-items",
-        "search-todos", "search-advanced", "get-recent", "add-todo",
-        "search-items", "add-project", "update-todo", "update-project", "show-item"
-    ]
-    
-    registered_tool_names = [tool.name for tool in tools]
-    
-    # Check if all required tools are registered
-    missing_tools = [name for name in required_tool_names if name not in registered_tool_names]
-    
-    if missing_tools:
-        logger.error(f"Missing required tool registrations: {missing_tools}")
-        return False
-        
-    # Check if all registered tools have proper descriptions and parameters
-    for tool in tools:
-        if not tool.description or len(tool.description) < 10:
-            logger.warning(f"Tool '{tool.name}' has an insufficient description")
-        
-        # Basic parameter validation could be added here
-        # This would depend on your tool schema requirements
-    
-    return True
 
 
 class CircuitBreaker:
@@ -217,41 +178,10 @@ class DeadLetterQueue:
         self._save_queue()
         logger.warning(f"Added to DLQ: {operation} with error: {str(error)}")
     
-    def retry_all(self):
-        """Attempt to retry all operations in the DLQ"""
-        if not self.queue:
-            return {"success": True, "retried": 0, "failed": 0}
-        
-        from .url_scheme import construct_url, execute_url
-        
-        success_count = 0
-        failure_count = 0
-        remaining_queue = []
-        
-        for entry in self.queue:
-            try:
-                url = construct_url(entry["operation"], entry["params"])
-                result = retry_operation(lambda: execute_url(url))
-                
-                if result:
-                    success_count += 1
-                else:
-                    entry["attempts"] += 1
-                    remaining_queue.append(entry)
-                    failure_count += 1
-            except Exception:
-                entry["attempts"] += 1
-                remaining_queue.append(entry)
-                failure_count += 1
-        
-        self.queue = remaining_queue
+    def clear(self):
+        """Clear all entries from the DLQ."""
+        self.queue = []
         self._save_queue()
-        
-        return {
-            "success": failure_count == 0,
-            "retried": success_count + failure_count,
-            "failed": failure_count
-        }
 
 
 class RateLimiter:
