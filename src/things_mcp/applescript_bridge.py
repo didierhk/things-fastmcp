@@ -38,7 +38,8 @@ def run_applescript(script: str, timeout: int = 10) -> Union[str, bool]:
 def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str] = None,
                    deadline: Optional[str] = None, tags: Optional[List[str]] = None,
                    checklist_items: Optional[List[str]] = None,
-                   list_title: Optional[str] = None) -> str:
+                   list_title: Optional[str] = None,
+                   heading: Optional[str] = None) -> str:
     """Add a todo to Things directly using AppleScript.
 
     This bypasses URL schemes entirely to avoid encoding issues.
@@ -51,6 +52,7 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         tags: Tags to apply to the todo
         checklist_items: List of checklist item titles
         list_title: Name of project/area to add to
+        heading: Name of heading within project to add under
 
     Returns:
         ID of the created todo if successful, False otherwise
@@ -86,9 +88,14 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         else:
             logger.warning(f"Custom date format '{when}' not supported, defaulting to today")
 
-    # Add deadline if provided
+    # Add deadline if provided (component-based for locale safety)
     if deadline and re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
-        script_parts.append(f'set deadline of newTodo to date "{deadline}"')
+        y, m, d = deadline.split('-')
+        script_parts.append('set deadlineDate to current date')
+        script_parts.append(f'set year of deadlineDate to {y}')
+        script_parts.append(f'set month of deadlineDate to {int(m)}')
+        script_parts.append(f'set day of deadlineDate to {int(d)}')
+        script_parts.append('set deadline of newTodo to deadlineDate')
     elif deadline:
         logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
 
@@ -108,6 +115,15 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         script_parts.append('try')
         script_parts.append('  set target_project to first project whose name is project_name')
         script_parts.append('  set project of newTodo to target_project')
+        # Place under heading if specified
+        if heading:
+            script_parts.append(f'  set heading_name to "{escape_applescript_string(heading)}"')
+            script_parts.append('  try')
+            script_parts.append('    set target_heading to first to do of target_project whose name is heading_name and status is open')
+            script_parts.append('    move newTodo to before target_heading')
+            script_parts.append('  on error')
+            script_parts.append(f'    -- Heading "{escape_applescript_string(heading)}" not found in project, todo stays at project root')
+            script_parts.append('  end try')
         script_parts.append('on error')
         script_parts.append('  -- Project not found, try area')
         script_parts.append('  try')
@@ -117,6 +133,8 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         script_parts.append('    -- Neither project nor area found, todo will remain in inbox')
         script_parts.append('  end try')
         script_parts.append('end try')
+    elif heading:
+        logger.warning(f"Heading '{heading}' specified without list_title — heading requires a project context")
 
     # Get the ID of the created todo
     script_parts.append('return id of newTodo')
@@ -138,7 +156,8 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
 
 def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[str] = None,
                        deadline: Optional[str] = None, tags: Optional[List[str]] = None,
-                       area_title: Optional[str] = None, todos: Optional[List[str]] = None) -> Union[str, bool]:
+                       area_title: Optional[str] = None, area_id: Optional[str] = None,
+                       todos: Optional[List[str]] = None) -> Union[str, bool]:
     """Create a project in Things directly using AppleScript.
 
     Args:
@@ -148,6 +167,7 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
         deadline: Deadline in YYYY-MM-DD format
         tags: Tags to apply
         area_title: Name of area to add to
+        area_id: UUID of area to add to (takes precedence over area_title)
         todos: Initial todo titles to create in the project
 
     Returns:
@@ -178,13 +198,27 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
             logger.warning(f"Custom date format '{when}' not supported for project, defaulting to today")
 
     if deadline and re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
-        script_parts.append(f'set deadline of newProject to date "{deadline}"')
+        y, m, d = deadline.split('-')
+        script_parts.append('set deadlineDate to current date')
+        script_parts.append(f'set year of deadlineDate to {y}')
+        script_parts.append(f'set month of deadlineDate to {int(m)}')
+        script_parts.append(f'set day of deadlineDate to {int(d)}')
+        script_parts.append('set deadline of newProject to deadlineDate')
 
     if tags:
         for tag in tags:
             script_parts.append(f'tell newProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
 
-    if area_title:
+    if area_id:
+        # area_id takes precedence over area_title
+        escaped_id = escape_applescript_string(area_id)
+        script_parts.append('try')
+        script_parts.append(f'  set target_area to first area whose id is "{escaped_id}"')
+        script_parts.append('  set area of newProject to target_area')
+        script_parts.append('on error')
+        script_parts.append(f'  -- Area with ID "{escaped_id}" not found')
+        script_parts.append('end try')
+    elif area_title:
         script_parts.append(f'set area_name to "{escape_applescript_string(area_title)}"')
         script_parts.append('try')
         script_parts.append('  set target_area to first area whose name is area_name')
@@ -212,14 +246,14 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
         return False
 
 
-def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[str] = None,
+def update_project_direct(project_id: str, title: Optional[str] = None, notes: Optional[str] = None,
                           when: Optional[str] = None, deadline: Optional[str] = None,
                           tags: Optional[List[str]] = None,
                           completed: Optional[bool] = None, canceled: Optional[bool] = None) -> bool:
     """Update a project directly using AppleScript.
 
     Args:
-        id: The ID of the project to update
+        project_id: The ID of the project to update
         title: New title
         notes: New notes
         when: New schedule (today, tomorrow, evening, anytime, someday, or YYYY-MM-DD)
@@ -235,7 +269,7 @@ def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[
 
     script_parts = ['tell application "Things3"']
     script_parts.append('try')
-    script_parts.append(f'    set theProject to project id "{escape_applescript_string(id)}"')
+    script_parts.append(f'    set theProject to project id "{escape_applescript_string(project_id)}"')
 
     if title:
         script_parts.append(f'    set name of theProject to "{escape_applescript_string(title)}"')
@@ -264,13 +298,23 @@ def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[
 
     if deadline:
         if re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
-            script_parts.append(f'    set deadline of theProject to date "{deadline}"')
+            y, m, d = deadline.split('-')
+            script_parts.append('    set deadlineDate to current date')
+            script_parts.append(f'    set year of deadlineDate to {y}')
+            script_parts.append(f'    set month of deadlineDate to {int(m)}')
+            script_parts.append(f'    set day of deadlineDate to {int(d)}')
+            script_parts.append('    set deadline of theProject to deadlineDate')
         else:
             logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
 
     if tags is not None:
         if isinstance(tags, str):
             tags = [tags]
+        # Clear existing tags before applying replacements
+        script_parts.append('    set oldTags to tags of theProject')
+        script_parts.append('    repeat with t from (count of oldTags) to 1 by -1')
+        script_parts.append('        delete item t of oldTags')
+        script_parts.append('    end repeat')
         for tag in tags:
             script_parts.append(f'    tell theProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
 
@@ -298,7 +342,7 @@ def update_project_direct(id: str, title: Optional[str] = None, notes: Optional[
 
     result = run_applescript(script)
     if result == "true":
-        logger.info(f"Successfully updated project with ID: {id}")
+        logger.info(f"Successfully updated project with ID: {project_id}")
         return True
     else:
         logger.error(f"AppleScript update_project_direct failed: {result}")
@@ -328,17 +372,17 @@ def escape_applescript_string(text: str) -> str:
     text = text.replace('\r', ' ')
     return text
 
-def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str] = None,
+def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optional[str] = None,
                      when: Optional[str] = None, deadline: Optional[str] = None,
                      tags: Optional[Union[List[str], str]] = None, add_tags: Optional[Union[List[str], str]] = None,
-                     checklist_items: Optional[List[str]] = None, completed: Optional[bool] = None, 
+                     checklist_items: Optional[List[str]] = None, completed: Optional[bool] = None,
                      canceled: Optional[bool] = None) -> bool:
     """Update a todo directly using AppleScript.
-    
+
     This bypasses URL schemes entirely to avoid authentication issues.
-    
+
     Args:
-        id: The ID of the todo to update
+        todo_id: The ID of the todo to update
         title: New title for the todo
         notes: New notes for the todo
         when: New schedule for the todo (today, tomorrow, evening, anytime, someday, or YYYY-MM-DD)
@@ -357,7 +401,7 @@ def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str
     # Build the AppleScript command to find and update the todo
     script_parts = ['tell application "Things3"']
     script_parts.append('try')
-    script_parts.append(f'    set theTodo to to do id "{escape_applescript_string(id)}"')
+    script_parts.append(f'    set theTodo to to do id "{escape_applescript_string(todo_id)}"')
     
     # Update properties one at a time
     if title:
@@ -524,7 +568,7 @@ def update_todo_direct(id: str, title: Optional[str] = None, notes: Optional[str
     result = run_applescript(script)
     
     if result == "true":
-        logger.info(f"Successfully updated todo with ID: {id}")
+        logger.info(f"Successfully updated todo with ID: {todo_id}")
         return True
     else:
         logger.error(f"AppleScript update_todo_direct failed: {result}")
