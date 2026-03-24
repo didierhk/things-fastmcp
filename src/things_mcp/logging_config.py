@@ -214,5 +214,5 @@ def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with the given name."""
     return logging.getLogger(name)
 
-# Initialize logging when module is imported
-setup_logging()
+# Callers should invoke setup_logging() explicitly to configure logging.
+# Example: setup_logging(console_level="INFO", file_level="DEBUG", structured_logs=True)
