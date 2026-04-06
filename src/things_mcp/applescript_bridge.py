@@ -5,6 +5,28 @@ from typing import Optional, List, Dict, Any, Union
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_tags(tags: List[str]) -> List[str]:
+    """Validate and sanitize tag names before passing to AppleScript.
+
+    Rejects empty strings and strips commas (the `set tag names` delimiter).
+    Logs warnings for any tags that are modified or dropped.
+    """
+    clean = []
+    for tag in tags:
+        tag = tag.strip()
+        if not tag:
+            logger.warning("Empty tag name dropped")
+            continue
+        if ',' in tag:
+            logger.warning(f"Tag '{tag}' contains commas — commas stripped (Things3 uses comma as delimiter)")
+            tag = tag.replace(',', '')
+            if not tag:
+                continue
+        clean.append(tag)
+    return clean
+
+
 def run_applescript(script: str, timeout: int = 10) -> Union[str, bool]:
     """Run an AppleScript command and return the result.
 
@@ -115,6 +137,8 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
 
     # Add tags if provided
     if tags and len(tags) > 0:
+        tags = _sanitize_tags(tags)
+    if tags:
         escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
         script_parts.append(f'set tag names of newTodo to "{escaped_tags}"')
 
@@ -233,6 +257,8 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
         script_parts.append('set due date of newProject to deadlineDate')
 
     if tags:
+        tags = _sanitize_tags(tags)
+    if tags:
         escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
         script_parts.append(f'set tag names of newProject to "{escaped_tags}"')
 
@@ -348,6 +374,7 @@ def update_project_direct(project_id: str, title: Optional[str] = None, notes: O
     if tags is not None:
         if isinstance(tags, str):
             tags = [tags]
+        tags = _sanitize_tags(tags)
         if tags:
             escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
             script_parts.append(f'    set tag names of theProject to "{escaped_tags}"')
@@ -496,6 +523,7 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
         # Convert string tags to list if needed
         if isinstance(tags, str):
             tags = [tags]
+        tags = _sanitize_tags(tags)
 
         if tags:
             escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
@@ -509,6 +537,7 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
         # Convert string to list if needed
         if isinstance(add_tags, str):
             add_tags = [add_tags]
+        add_tags = _sanitize_tags(add_tags)
 
         # Get current tags, merge with new ones, set atomically
         script_parts.append('    set currentTagNames to tag names of theTodo')
