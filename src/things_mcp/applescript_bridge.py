@@ -79,12 +79,23 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
             'tomorrow': 'set activation date of newTodo to ((current date) + 1 * days)',
             'evening': '',  # Default is today, no need to set
             'anytime': '',  # Default
-            'someday': 'set status of newTodo to someday'
+            'someday': 'move newTodo to list "Someday"'
         }
 
         if when in when_mapping:
             if when_mapping[when]:
                 script_parts.append(when_mapping[when])
+        elif re.match(r'^\d{4}-\d{2}-\d{2}$', when):
+            # Handle YYYY-MM-DD format dates (component-based for locale safety)
+            year, month, day = when.split('-')
+            script_parts.append('set newDate to current date')
+            script_parts.append(f'set year of newDate to {year}')
+            script_parts.append(f'set month of newDate to {int(month)}')
+            script_parts.append(f'set day of newDate to {int(day)}')
+            script_parts.append('set hours of newDate to 0')
+            script_parts.append('set minutes of newDate to 0')
+            script_parts.append('set seconds of newDate to 0')
+            script_parts.append('schedule newTodo for newDate')
         else:
             logger.warning(f"Custom date format '{when}' not supported, defaulting to today")
 
@@ -95,7 +106,10 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
         script_parts.append(f'set year of deadlineDate to {y}')
         script_parts.append(f'set month of deadlineDate to {int(m)}')
         script_parts.append(f'set day of deadlineDate to {int(d)}')
-        script_parts.append('set deadline of newTodo to deadlineDate')
+        script_parts.append('set hours of deadlineDate to 0')
+        script_parts.append('set minutes of deadlineDate to 0')
+        script_parts.append('set seconds of deadlineDate to 0')
+        script_parts.append('set due date of newTodo to deadlineDate')
     elif deadline:
         logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
 
@@ -189,11 +203,21 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
             'tomorrow': 'set activation date of newProject to ((current date) + 1 * days)',
             'evening': '',
             'anytime': '',
-            'someday': 'set status of newProject to someday'
+            'someday': 'move newProject to list "Someday"'
         }
         if when in when_mapping:
             if when_mapping[when]:
                 script_parts.append(when_mapping[when])
+        elif re.match(r'^\d{4}-\d{2}-\d{2}$', when):
+            year, month, day = when.split('-')
+            script_parts.append('set newDate to current date')
+            script_parts.append(f'set year of newDate to {year}')
+            script_parts.append(f'set month of newDate to {int(month)}')
+            script_parts.append(f'set day of newDate to {int(day)}')
+            script_parts.append('set hours of newDate to 0')
+            script_parts.append('set minutes of newDate to 0')
+            script_parts.append('set seconds of newDate to 0')
+            script_parts.append('schedule newProject for newDate')
         else:
             logger.warning(f"Custom date format '{when}' not supported for project, defaulting to today")
 
@@ -203,7 +227,10 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
         script_parts.append(f'set year of deadlineDate to {y}')
         script_parts.append(f'set month of deadlineDate to {int(m)}')
         script_parts.append(f'set day of deadlineDate to {int(d)}')
-        script_parts.append('set deadline of newProject to deadlineDate')
+        script_parts.append('set hours of deadlineDate to 0')
+        script_parts.append('set minutes of deadlineDate to 0')
+        script_parts.append('set seconds of deadlineDate to 0')
+        script_parts.append('set due date of newProject to deadlineDate')
 
     if tags:
         for tag in tags:
@@ -291,7 +318,15 @@ def update_project_direct(project_id: str, title: Optional[str] = None, notes: O
         elif when == 'someday':
             script_parts.append('    move theProject to list "Someday"')
         elif is_date_format:
-            script_parts.append(f'    set activation date of theProject to date "{when}"')
+            year, month, day = when.split('-')
+            script_parts.append('    set newDate to current date')
+            script_parts.append(f'    set year of newDate to {year}')
+            script_parts.append(f'    set month of newDate to {int(month)}')
+            script_parts.append(f'    set day of newDate to {int(day)}')
+            script_parts.append('    set hours of newDate to 0')
+            script_parts.append('    set minutes of newDate to 0')
+            script_parts.append('    set seconds of newDate to 0')
+            script_parts.append('    set activation date of theProject to newDate')
             script_parts.append('    move theProject to list "Upcoming"')
         else:
             logger.warning(f"Schedule format '{when}' not supported for project update")
@@ -303,7 +338,10 @@ def update_project_direct(project_id: str, title: Optional[str] = None, notes: O
             script_parts.append(f'    set year of deadlineDate to {y}')
             script_parts.append(f'    set month of deadlineDate to {int(m)}')
             script_parts.append(f'    set day of deadlineDate to {int(d)}')
-            script_parts.append('    set deadline of theProject to deadlineDate')
+            script_parts.append('    set hours of deadlineDate to 0')
+            script_parts.append('    set minutes of deadlineDate to 0')
+            script_parts.append('    set seconds of deadlineDate to 0')
+            script_parts.append('    set due date of theProject to deadlineDate')
         else:
             logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
 
@@ -367,7 +405,7 @@ def escape_applescript_string(text: str) -> str:
 
     # Order matters: backslashes first, then quotes, then newlines
     text = text.replace('\\', '\\\\')
-    text = text.replace('"', '""')
+    text = text.replace('"', '\\"')
     text = text.replace('\n', ' ')
     text = text.replace('\r', ' ')
     return text
@@ -448,7 +486,10 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
             script_parts.append(f'    set year of deadlineDate to {y}')
             script_parts.append(f'    set month of deadlineDate to {int(m)}')
             script_parts.append(f'    set day of deadlineDate to {int(d)}')
-            script_parts.append('    set deadline of theTodo to deadlineDate')
+            script_parts.append('    set hours of deadlineDate to 0')
+            script_parts.append('    set minutes of deadlineDate to 0')
+            script_parts.append('    set seconds of deadlineDate to 0')
+            script_parts.append('    set due date of theTodo to deadlineDate')
         else:
             logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
     
