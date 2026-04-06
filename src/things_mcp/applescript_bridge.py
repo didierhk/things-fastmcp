@@ -115,8 +115,8 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
 
     # Add tags if provided
     if tags and len(tags) > 0:
-        for tag in tags:
-            script_parts.append(f'tell newTodo to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
+        escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
+        script_parts.append(f'set tag names of newTodo to "{escaped_tags}"')
 
     # Add checklist items if provided
     if checklist_items:
@@ -233,8 +233,8 @@ def add_project_direct(title: str, notes: Optional[str] = None, when: Optional[s
         script_parts.append('set due date of newProject to deadlineDate')
 
     if tags:
-        for tag in tags:
-            script_parts.append(f'tell newProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
+        escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
+        script_parts.append(f'set tag names of newProject to "{escaped_tags}"')
 
     if area_id:
         # area_id takes precedence over area_title
@@ -348,13 +348,11 @@ def update_project_direct(project_id: str, title: Optional[str] = None, notes: O
     if tags is not None:
         if isinstance(tags, str):
             tags = [tags]
-        # Clear existing tags before applying replacements
-        script_parts.append('    set oldTags to tags of theProject')
-        script_parts.append('    repeat with t from (count of oldTags) to 1 by -1')
-        script_parts.append('        delete item t of oldTags')
-        script_parts.append('    end repeat')
-        for tag in tags:
-            script_parts.append(f'    tell theProject to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
+        if tags:
+            escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
+            script_parts.append(f'    set tag names of theProject to "{escaped_tags}"')
+        else:
+            script_parts.append('    set tag names of theProject to ""')
 
     if completed is not None:
         if completed:
@@ -493,49 +491,37 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
         else:
             logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
     
-    # Handle tags (clearing and adding new ones)
+    # Handle tags — use `set tag names` (atomic, reliable; `make new tag` silently fails)
     if tags is not None:
         # Convert string tags to list if needed
         if isinstance(tags, str):
             tags = [tags]
-            
+
         if tags:
-            # Clear existing tags then add new ones (same pattern as update_project_direct)
-            script_parts.append('    set oldTags to tags of theTodo')
-            script_parts.append('    repeat with t from (count of oldTags) to 1 by -1')
-            script_parts.append('        delete item t of oldTags')
-            script_parts.append('    end repeat')
-            for tag in tags:
-                script_parts.append(f'    tell theTodo to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
+            escaped_tags = ','.join(escape_applescript_string(t) for t in tags)
+            script_parts.append(f'    set tag names of theTodo to "{escaped_tags}"')
         else:
             # Clear all tags if empty list provided
-            script_parts.append('    -- Clear all tags')
-            script_parts.append('    set oldTags to tags of theTodo')
-            script_parts.append('    repeat with t from (count of oldTags) to 1 by -1')
-            script_parts.append('        delete item t of oldTags')
-            script_parts.append('    end repeat')
-    
+            script_parts.append('    set tag names of theTodo to ""')
+
     # Handle adding tags without replacing existing ones
     if add_tags is not None:
         # Convert string to list if needed
         if isinstance(add_tags, str):
             add_tags = [add_tags]
-            
+
+        # Get current tags, merge with new ones, set atomically
+        script_parts.append('    set currentTagNames to tag names of theTodo')
         for tag in add_tags:
             tag_name = escape_applescript_string(tag)
-            script_parts.append(f'''
-            -- Add tag {tag_name} if it doesn't exist
-            set tagFound to false
-            repeat with t in tags of theTodo
-                if name of t is "{tag_name}" then
-                    set tagFound to true
-                    exit repeat
-                end if
-            end repeat
-            if not tagFound then
-                tell theTodo to make new tag with properties {{name:"{tag_name}"}}
-            end if
-            ''')
+            script_parts.append(f'    if currentTagNames does not contain "{tag_name}" then')
+            script_parts.append(f'        if currentTagNames is "" then')
+            script_parts.append(f'            set currentTagNames to "{tag_name}"')
+            script_parts.append(f'        else')
+            script_parts.append(f'            set currentTagNames to currentTagNames & ",{tag_name}"')
+            script_parts.append(f'        end if')
+            script_parts.append(f'    end if')
+        script_parts.append('    set tag names of theTodo to currentTagNames')
             
     # Handle checklist items - simplified approach
     if checklist_items is not None:
