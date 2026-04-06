@@ -91,12 +91,12 @@ class TestAddProjectDirect:
 class TestUpdateProjectDirect:
     def test_returns_true_on_success(self):
         with patch('src.things_mcp.applescript_bridge.run_applescript', return_value="true"):
-            result = update_project_direct(id="proj-uuid", title="New Title")
+            result = update_project_direct(project_id="proj-uuid", title="New Title")
             assert result is True
 
     def test_returns_false_on_failure(self):
         with patch('src.things_mcp.applescript_bridge.run_applescript', return_value="false"):
-            result = update_project_direct(id="proj-uuid", completed=True)
+            result = update_project_direct(project_id="proj-uuid", completed=True)
             assert result is False
 
     def test_uses_project_class_not_todo(self):
@@ -105,7 +105,7 @@ class TestUpdateProjectDirect:
             captured.append(script)
             return "true"
         with patch('src.things_mcp.applescript_bridge.run_applescript', side_effect=capture):
-            update_project_direct(id="proj-uuid", title="Updated")
+            update_project_direct(project_id="proj-uuid", title="Updated")
         assert 'project id' in captured[0]
         assert 'to do id' not in captured[0]
 
@@ -115,5 +115,5 @@ class TestUpdateProjectDirect:
             captured.append(script)
             return "true"
         with patch('src.things_mcp.applescript_bridge.run_applescript', side_effect=capture):
-            update_project_direct(id="proj-uuid", completed=True)
+            update_project_direct(project_id="proj-uuid", completed=True)
         assert 'set status of theProject to completed' in captured[0]

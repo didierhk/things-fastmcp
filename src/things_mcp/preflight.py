@@ -11,6 +11,7 @@ import subprocess
 def check() -> None:
     """Run before server starts. Raises SystemExit on failure."""
     errors = []
+    warnings = []
 
     # 1. Pydantic core version compatibility — catches the exact Mar 16 failure mode
     try:
@@ -32,23 +33,29 @@ def check() -> None:
     except ImportError as e:
         errors.append(f"MCP SDK not installed: {e}")
 
-    # 4. Things app reachable (macOS only)
+    # 4. Things app reachable (macOS only) — warn, don't block startup
+    things_running = False
     try:
         result = subprocess.run(
             ["osascript", "-e", 'tell application "System Events" to (name of processes) contains "Things3"'],
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
-        if result.stdout.strip().lower() != "true":
-            errors.append("Things 3 app is not running")
+        things_running = result.stdout.strip().lower() == "true"
+        if not things_running:
+            warnings.append("Things 3 app is not running (will attempt launch when needed)")
     except Exception as e:
-        errors.append(f"Cannot check Things app status: {e}")
+        warnings.append(f"Cannot check Things app status: {e}")
 
     if errors:
         print("PREFLIGHT CHECK FAILED:", file=sys.stderr)
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
+
+    for warn in warnings:
+        print(f"  ⚠ {warn}", file=sys.stderr)
 
     print("Preflight checks passed", file=sys.stderr)

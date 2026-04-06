@@ -13,7 +13,7 @@ from mcp.server.fastmcp import FastMCP
 import mcp.types as types
 
 # Import supporting modules
-from .formatters import format_todo, format_project, format_area, format_tag
+from .formatters import format_todo, format_project, format_area, format_tag, invalidate_name_caches
 from .utils import app_state, circuit_breaker, dead_letter_queue, rate_limiter, reliable_tool
 from .url_scheme import show, search, launch_things, execute_url
 from .applescript_bridge import (
@@ -39,6 +39,7 @@ mcp = FastMCP(
 # LIST VIEWS
 
 @mcp.tool(name="get-inbox")
+@cached(ttl=CACHE_TTL.get("inbox", 30))
 def get_inbox() -> str:
     """Get todos from Inbox"""
     import time
@@ -82,6 +83,7 @@ def get_today() -> str:
         raise
 
 @mcp.tool(name="get-upcoming")
+@cached(ttl=CACHE_TTL.get("upcoming", 60))
 def get_upcoming() -> str:
     """Get upcoming todos"""
     todos = things.upcoming()
@@ -93,6 +95,7 @@ def get_upcoming() -> str:
     return "\n\n---\n\n".join(formatted_todos)
 
 @mcp.tool(name="get-anytime")
+@cached(ttl=CACHE_TTL.get("anytime", 300))
 def get_anytime() -> str:
     """Get todos from Anytime list"""
     todos = things.anytime()
@@ -104,6 +107,7 @@ def get_anytime() -> str:
     return "\n\n---\n\n".join(formatted_todos)
 
 @mcp.tool(name="get-someday")
+@cached(ttl=CACHE_TTL.get("someday", 300))
 def get_someday() -> str:
     """Get todos from Someday list"""
     todos = things.someday()
@@ -115,6 +119,7 @@ def get_someday() -> str:
     return "\n\n---\n\n".join(formatted_todos)
 
 @mcp.tool(name="get-logbook")
+@cached(ttl=CACHE_TTL.get("logbook", 300))
 def get_logbook(period: str = "7d", limit: int = 50) -> str:
     """
     Get completed todos from Logbook, defaults to last 7 days
@@ -135,6 +140,7 @@ def get_logbook(period: str = "7d", limit: int = 50) -> str:
     return "\n\n---\n\n".join(formatted_todos)
 
 @mcp.tool(name="get-trash")
+@cached(ttl=CACHE_TTL.get("trash", 300))
 def get_trash() -> str:
     """Get trashed todos"""
     todos = things.trash()
@@ -170,6 +176,7 @@ def get_todos(project_uuid: Optional[str] = None, include_items: bool = True) ->
     return "\n\n---\n\n".join(formatted_todos)
 
 @mcp.tool(name="get-projects")
+@cached(ttl=CACHE_TTL.get("projects", 300))
 def get_projects(include_items: bool = False) -> str:
     """
     Get all projects from Things
@@ -186,6 +193,7 @@ def get_projects(include_items: bool = False) -> str:
     return "\n\n---\n\n".join(formatted_projects)
 
 @mcp.tool(name="get-areas")
+@cached(ttl=CACHE_TTL.get("areas", 600))
 def get_areas(include_items: bool = False) -> str:
     """
     Get all areas from Things
@@ -204,6 +212,7 @@ def get_areas(include_items: bool = False) -> str:
 # TAG OPERATIONS
 
 @mcp.tool(name="get-tags")
+@cached(ttl=CACHE_TTL.get("tags", 600))
 def get_tags(include_items: bool = False) -> str:
     """
     Get all tags
@@ -314,6 +323,7 @@ def add_task(
     tags: Optional[List[str]] = None,
     checklist_items: Optional[List[str]] = None,
     list_title: Optional[str] = None,
+    heading: Optional[str] = None,
 ) -> str:
     """
     Create a new todo in Things
@@ -326,6 +336,7 @@ def add_task(
         tags: Tags to apply to the todo
         checklist_items: Checklist items to add
         list_title: Title of project/area to add to
+        heading: Heading within the project to add under (requires list_title)
     """
     try:
         task_id = add_todo_direct(
@@ -335,11 +346,13 @@ def add_task(
             deadline=deadline,
             tags=tags,
             checklist_items=checklist_items,
-            list_title=list_title
+            list_title=list_title,
+            heading=heading
         )
         if not task_id:
             return f"Error: Failed to create todo: {title}"
         invalidate_caches_for(["get_inbox", "get_today", "get_upcoming", "get_todos"])
+        invalidate_name_caches()
         # Verification: confirm the todo actually landed in Things
         verified = things.get(task_id)
         if not verified:
@@ -384,11 +397,19 @@ def add_new_project(
             deadline=deadline,
             tags=tags,
             area_title=area_title,
+            area_id=area_id,
             todos=todos
         )
         if not project_id:
             return f"Error: Failed to create project: {title}"
         invalidate_caches_for(["get_projects", "get_today", "get_upcoming", "get_anytime"])
+        invalidate_name_caches()
+        # Verification: confirm the project actually landed in Things
+        verified = things.get(project_id)
+        if not verified:
+            logger.warning(f"Write verification failed: project {project_id} not found after creation")
+        else:
+            logger.debug(f"Write verified: project {project_id} confirmed in Things")
         return f"Successfully created project: {title} (ID: {project_id})"
     except Exception as e:
         logger.error(f"Error creating project: {str(e)}")
@@ -421,7 +442,7 @@ def update_task(
     """
     try:
         success = update_todo_direct(
-            id=id,
+            todo_id=id,
             title=title,
             notes=notes,
             when=when,
@@ -433,6 +454,7 @@ def update_task(
         if not success:
             return f"Error: Failed to update todo with ID: {id}"
         invalidate_caches_for(["get_inbox", "get_today", "get_upcoming", "get_anytime", "get_todos"])
+        invalidate_name_caches()
         # Verification: confirm the todo still exists after update
         verified = things.get(id)
         if not verified:
@@ -471,7 +493,7 @@ def update_existing_project(
     """
     try:
         success = update_project_direct(
-            id=id,
+            project_id=id,
             title=title,
             notes=notes,
             when=when,
@@ -483,6 +505,7 @@ def update_existing_project(
         if not success:
             return f"Error: Failed to update project with ID: {id}"
         invalidate_caches_for(["get_projects", "get_today", "get_upcoming", "get_anytime"])
+        invalidate_name_caches()
         return f"Successfully updated project with ID: {id}"
     except Exception as e:
         logger.error(f"Error updating project: {str(e)}")
@@ -592,6 +615,10 @@ def get_cache_statistics() -> str:
 # Main entry point
 def run_things_mcp_server():
     """Run the Things MCP server"""
+    # Run preflight checks (dependency validation, Things app status)
+    from .preflight import check as preflight_check
+    preflight_check()
+
     # Check if Things app is available
     if not app_state.update_app_state():
         logger.warning("Things app is not running at startup. MCP will attempt to launch it when needed.")
