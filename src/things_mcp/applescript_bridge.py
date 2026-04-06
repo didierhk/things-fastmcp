@@ -428,16 +428,14 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
         elif when == 'someday':
             script_parts.append('    move theTodo to list "Someday"')
         elif is_date_format:
-            # Handle YYYY-MM-DD format dates
+            # Handle YYYY-MM-DD format dates (component-based for locale safety)
             year, month, day = when.split('-')
-            script_parts.append(f'''
-    -- Set activation date with direct date string
-    set dateString to "{when}"
-    set newDate to date dateString
-    set activation date of theTodo to newDate
-    -- Move to the Upcoming list
-    move theTodo to list "Upcoming"
-''')
+            script_parts.append('    set newDate to current date')
+            script_parts.append(f'    set year of newDate to {year}')
+            script_parts.append(f'    set month of newDate to {int(month)}')
+            script_parts.append(f'    set day of newDate to {int(day)}')
+            script_parts.append('    set activation date of theTodo to newDate')
+            script_parts.append('    move theTodo to list "Upcoming"')
         else:
             # For other formats, just log a warning and don't try to set it
             logger.warning(f"Schedule format '{when}' not directly supported in this simplified version")
@@ -445,13 +443,12 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
     if deadline:
         # Check if deadline is in YYYY-MM-DD format
         if re.match(r'^\d{4}-\d{2}-\d{2}$', deadline):
-            year, month, day = deadline.split('-')
-            script_parts.append(f'''
-    -- Set deadline with direct date string
-    set deadlineString to "{deadline}"
-    set deadlineDate to date deadlineString
-    set deadline of theTodo to deadlineDate
-''')
+            y, m, d = deadline.split('-')
+            script_parts.append('    set deadlineDate to current date')
+            script_parts.append(f'    set year of deadlineDate to {y}')
+            script_parts.append(f'    set month of deadlineDate to {int(m)}')
+            script_parts.append(f'    set day of deadlineDate to {int(d)}')
+            script_parts.append('    set deadline of theTodo to deadlineDate')
         else:
             logger.warning(f"Invalid deadline format: {deadline}. Expected YYYY-MM-DD")
     
@@ -462,26 +459,13 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
             tags = [tags]
             
         if tags:
-            # Simplified tag handling
-            import json
-            tags_json = json.dumps(tags)
-            script_parts.append(f'''
-    -- Set tags using a list
-    set tagNameList to {tags_json}
-    -- Clear existing tags
-    set oldTags to tags of theTodo
-    repeat with t from (count of oldTags) to 1 by -1
-        delete item t of oldTags
-    end repeat
-    -- Add new tags
-    repeat with t from 1 to (count of tagNameList)
-        set tagText to item t of tagNameList
-        tell theTodo
-            set newTag to make new tag
-            set name of newTag to tagText
-        end tell
-    end repeat
-''')
+            # Clear existing tags then add new ones (same pattern as update_project_direct)
+            script_parts.append('    set oldTags to tags of theTodo')
+            script_parts.append('    repeat with t from (count of oldTags) to 1 by -1')
+            script_parts.append('        delete item t of oldTags')
+            script_parts.append('    end repeat')
+            for tag in tags:
+                script_parts.append(f'    tell theTodo to make new tag with properties {{name:"{escape_applescript_string(tag)}"}}')
         else:
             # Clear all tags if empty list provided
             script_parts.append('    -- Clear all tags')
@@ -519,25 +503,13 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
             checklist_items = checklist_items.split('\n')
             
         if checklist_items:
-            # For simplicity, we'll use JSON to pass checklist items
-            import json
-            items_json = json.dumps([item for item in checklist_items])
-            script_parts.append(f'''
-    -- Clear and set checklist items
-    set oldItems to check list items of theTodo
-    repeat with i from (count of oldItems) to 1 by -1
-        delete item i of oldItems
-    end repeat
-    
-    set itemList to {items_json}
-    repeat with i from 1 to (count of itemList)
-        set itemText to item i of itemList
-        tell theTodo
-            set newItem to make new check list item
-            set name of newItem to itemText
-        end tell
-    end repeat
-''')
+            # Clear existing checklist items then add new ones
+            script_parts.append('    set oldItems to check list items of theTodo')
+            script_parts.append('    repeat with i from (count of oldItems) to 1 by -1')
+            script_parts.append('        delete item i of oldItems')
+            script_parts.append('    end repeat')
+            for item in checklist_items:
+                script_parts.append(f'    tell theTodo to make new check list item with properties {{name:"{escape_applescript_string(item)}"}}')
     
     # Handle completion status - use completion date approach
     if completed is not None:
