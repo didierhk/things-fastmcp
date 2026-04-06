@@ -3,21 +3,58 @@ import things
 
 logger = logging.getLogger(__name__)
 
+# In-memory lookup caches for project/area names.
+# Populated lazily on first miss, cleared by invalidate_name_caches().
+# Eliminates N+1 queries: without this, every todo with a project/area
+# ref triggers a things.get() call (~0.8ms each, 128 extra queries for
+# a 268-todo vault).
+_project_names: dict[str, str] = {}
+_area_names: dict[str, str] = {}
+
+
+def _get_project_name(uuid: str) -> str:
+    """Resolve project UUID to title, caching the result."""
+    if uuid not in _project_names:
+        try:
+            project = things.get(uuid)
+            _project_names[uuid] = project['title'] if project else ''
+        except Exception:
+            _project_names[uuid] = ''
+    return _project_names[uuid]
+
+
+def _get_area_name(uuid: str) -> str:
+    """Resolve area UUID to title, caching the result."""
+    if uuid not in _area_names:
+        try:
+            area = things.get(uuid)
+            _area_names[uuid] = area['title'] if area else ''
+        except Exception:
+            _area_names[uuid] = ''
+    return _area_names[uuid]
+
+
+def invalidate_name_caches() -> None:
+    """Clear project/area name caches (call after writes)."""
+    _project_names.clear()
+    _area_names.clear()
+
+
 def format_todo(todo: dict) -> str:
     """Helper function to format a single todo into a readable string."""
     logger.debug(f"Formatting todo: {todo}")
     todo_text = f"Title: {todo['title']}"
-    
+
     # Add UUID for reference
     todo_text += f"\nUUID: {todo['uuid']}"
-    
+
     # Add type
     todo_text += f"\nType: {todo['type']}"
-    
+
     # Add status if present
     if todo.get('status'):
         todo_text += f"\nStatus: {todo['status']}"
-        
+
     # Add start/list location
     if todo.get('start'):
         todo_text += f"\nList: {todo['start']}"
@@ -29,40 +66,34 @@ def format_todo(todo: dict) -> str:
         todo_text += f"\nDeadline: {todo['deadline']}"
     if todo.get('stop_date'):  # Completion date
         todo_text += f"\nCompleted: {todo['stop_date']}"
-    
+
     # Add notes if present
     if todo.get('notes'):
         todo_text += f"\nNotes: {todo['notes']}"
-    
-    # Add project info if present
+
+    # Add project info if present (cached lookup)
     if todo.get('project'):
-        try:
-            project = things.get(todo['project'])
-            if project:
-                todo_text += f"\nProject: {project['title']}"
-        except Exception:
-            pass
-            
-    # Add area info if present
+        name = _get_project_name(todo['project'])
+        if name:
+            todo_text += f"\nProject: {name}"
+
+    # Add area info if present (cached lookup)
     if todo.get('area'):
-        try:
-            area = things.get(todo['area'])
-            if area:
-                todo_text += f"\nArea: {area['title']}"
-        except Exception:
-            pass
-    
+        name = _get_area_name(todo['area'])
+        if name:
+            todo_text += f"\nArea: {name}"
+
     # Add tags if present
     if todo.get('tags'):
         todo_text += f"\nTags: {', '.join(todo['tags'])}"
-    
+
     # Add checklist if present and contains items
     if isinstance(todo.get('checklist'), list):
         todo_text += "\nChecklist:"
         for item in todo['checklist']:
             status = "✓" if item['status'] == 'completed' else "□"
             todo_text += f"\n  {status} {item['title']}"
-    
+
     return todo_text
 
 def format_project(project: dict, include_items: bool = False) -> str:

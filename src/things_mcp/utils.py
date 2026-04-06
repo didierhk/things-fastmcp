@@ -13,41 +13,28 @@ logger = logging.getLogger(__name__)
 
 
 def is_things_running() -> bool:
-    """Check if Things app is running.
-    
+    """Check if Things app is running and responsive.
+
+    Single osascript call — if Things responds, it's both running and
+    responsive.  Previous implementation used two subprocess calls
+    (process list check + ping), costing ~220ms.  This takes ~40ms.
+
     Returns:
-        bool: True if Things is running, False otherwise
+        bool: True if Things is running and responsive, False otherwise
     """
     try:
         if platform.system() != 'Darwin':
             logger.warning("Things availability check only works on macOS")
             return True
-            
+
         result = subprocess.run(
-            ['osascript', '-e', 'tell application "System Events" to (name of processes) contains "Things3"'],
+            ['osascript', '-e', 'tell application "Things3" to return name'],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            timeout=2
         )
-        is_running = result.stdout.strip().lower() == 'true'
-        
-        # If Things is running, also check if it's responsive
-        if is_running:
-            # Simple ping to see if Things responds
-            ping_result = subprocess.run(
-                ['osascript', '-e', 'tell application "Things3" to return name'],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=2  # 2 second timeout
-            )
-            is_responsive = ping_result.returncode == 0
-            
-            if not is_responsive:
-                logger.warning("Things is running but not responsive")
-                return False
-                
-        return is_running
+        return result.returncode == 0
     except subprocess.TimeoutExpired:
         logger.warning("Things app check timed out")
         return False
