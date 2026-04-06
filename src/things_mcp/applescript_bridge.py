@@ -97,9 +97,9 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
     # Add scheduling
     if when:
         when_mapping = {
-            'today': '',  # Default is today, no need to set
+            'today': 'move newTodo to list "Today"',
             'tomorrow': 'set activation date of newTodo to ((current date) + 1 * days)',
-            'evening': '',  # Default is today, no need to set
+            'evening': 'move newTodo to list "Evening"',
             'anytime': '',  # Default
             'someday': 'move newTodo to list "Someday"'
         }
@@ -144,8 +144,10 @@ def add_todo_direct(title: str, notes: Optional[str] = None, when: Optional[str]
 
     # Add checklist items if provided
     if checklist_items:
+        script_parts.append('tell newTodo')
         for item in checklist_items:
-            script_parts.append(f'tell newTodo to make new check list item with properties {{name:"{escape_applescript_string(item)}"}}')
+            script_parts.append(f'    make new check list item at end with properties {{name:"{escape_applescript_string(item)}"}}')
+        script_parts.append('end tell')
 
     # Add to a specific project/area if specified
     if list_title:
@@ -564,8 +566,10 @@ def update_todo_direct(todo_id: str, title: Optional[str] = None, notes: Optiona
             script_parts.append('    repeat with i from (count of oldItems) to 1 by -1')
             script_parts.append('        delete item i of oldItems')
             script_parts.append('    end repeat')
+            script_parts.append('    tell theTodo')
             for item in checklist_items:
-                script_parts.append(f'    tell theTodo to make new check list item with properties {{name:"{escape_applescript_string(item)}"}}')
+                script_parts.append(f'        make new check list item at end with properties {{name:"{escape_applescript_string(item)}"}}')
+            script_parts.append('    end tell')
     
     # Handle completion status - use completion date approach
     if completed is not None:
