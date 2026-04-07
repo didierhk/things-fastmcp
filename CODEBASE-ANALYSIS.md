@@ -211,7 +211,8 @@ ls src/things_mcp/handlers.py src/things_mcp/mcp_tools.py src/things_mcp/simple_
 ## References
 
 - Original project: https://github.com/hald/things-mcp
-- Enhanced fork: https://github.com/excelsier/things-fastmcp
+- Original enhanced fork: https://github.com/excelsier/things-fastmcp (inactive since May 2025)
+- This repo: https://github.com/didierhk/things-fastmcp
 - Things URL scheme docs: https://culturedcode.com/things/help/url-scheme/
 - Things AppleScript dictionary: Open Script Editor → File → Open Dictionary → Things3
 - MCP docs: https://modelcontextprotocol.io/

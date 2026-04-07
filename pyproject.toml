@@ -15,7 +15,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Utilities",
     "Topic :: Office/Business :: Scheduling",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -31,9 +31,9 @@ dependencies = [
 things3-enhanced-mcp = "src.things_mcp.fast_server:run_things_mcp_server"
 
 [project.urls]
-"Homepage" = "https://github.com/excelsier/things-fastmcp"
-"Bug Tracker" = "https://github.com/excelsier/things-fastmcp/issues"
-"Documentation" = "https://github.com/excelsier/things-fastmcp#readme"
+"Homepage" = "https://github.com/didierhk/things-fastmcp"
+"Bug Tracker" = "https://github.com/didierhk/things-fastmcp/issues"
+"Documentation" = "https://github.com/didierhk/things-fastmcp#readme"
 
 [build-system]
 requires = ["hatchling"]
